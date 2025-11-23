@@ -16,7 +16,7 @@ type ValidationResult struct {
 
 // ValidateImport checks data quality after import
 func ValidateImport(ctx context.Context, tx *sql.Tx, batchID int64) (*ValidationResult, error) {
-	queries := db.New()
+	queries := db.New(tx) // FIX: Pass tx to db.New()
 
 	result := &ValidationResult{
 		JobsWithoutInvoices: make([]int64, 0),
@@ -24,7 +24,7 @@ func ValidateImport(ctx context.Context, tx *sql.Tx, batchID int64) (*Validation
 	}
 
 	// Check for jobs without invoices
-	jobsWithoutInvoices, err := queries.GetJobsWithoutInvoices(ctx, tx, batchID)
+	jobsWithoutInvoices, err := queries.GetJobsWithoutInvoices(ctx, batchID) // FIX: Remove tx parameter - it's already in the queries object
 	if err != nil {
 		return nil, fmt.Errorf("failed to check jobs without invoices: %w", err)
 	}

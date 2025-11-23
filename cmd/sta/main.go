@@ -1,0 +1,129 @@
+package main
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+	"os"
+
+	_ "github.com/lib/pq"
+)
+
+const usage = `ServiceTitan Profitability Analysis Tool
+
+Usage:
+  sta import <jobs.csv> <invoices.csv>     Import ServiceTitan reports
+  sta list                                  List import history
+  sta report job-types                      Show profitability by job type
+  sta report campaigns                      Show profitability by campaign
+  sta report customers [--top N]            Show top customers by profit
+
+Database Configuration:
+  Set DATABASE_URL environment variable:
+    export DATABASE_URL="postgres://user:pass@localhost/dbname?sslmode=disable"
+
+Examples:
+  sta import jobs_2024.csv invoices_2024.csv
+  sta list
+  sta report job-types
+  sta report customers --top 20
+`
+
+func main() {
+	if len(os.Args) < 2 {
+		fmt.Printf("report: %v\n\n", usage)
+		os.Exit(1)
+	}
+
+	// Get database URL from environment
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" {
+		fmt.Println("Error: DATABASE_URL environment variable not set")
+		fmt.Println("\nExample:")
+		fmt.Println(`  export DATABASE_URL="postgres://user:pass@localhost/dbname?sslmode=disable"`)
+		os.Exit(1)
+	}
+
+	// Connect to database
+	db, err := sql.Open("postgres", dbURL)
+	if err != nil {
+		fmt.Printf("Error connecting to database: %v\n", err)
+		os.Exit(1)
+	}
+	defer db.Close()
+
+	// Test connection
+	if err := db.Ping(); err != nil {
+		fmt.Printf("Error connecting to database: %v\n", err)
+		os.Exit(1)
+	}
+
+	ctx := context.Background()
+	command := os.Args[1]
+
+	switch command {
+	case "import":
+		handleImport(ctx, db, os.Args[2:])
+	case "list":
+		handleList(ctx, db)
+	case "report":
+		handleReport(ctx, db, os.Args[2:])
+	case "help", "-h", "--help":
+		fmt.Printf("report: %v\n\n", usage)
+	default:
+		fmt.Printf("Unknown command: %s\n\n", command)
+		fmt.Printf("report: %v\n\n", usage)
+		os.Exit(1)
+	}
+}
+
+func handleImport(ctx context.Context, db *sql.DB, args []string) {
+	if len(args) != 2 {
+		fmt.Println("Error: import requires two arguments")
+		fmt.Println("Usage: sta import <jobs.csv> <invoices.csv>")
+		os.Exit(1)
+	}
+
+	jobsPath := args[0]
+	invoicesPath := args[1]
+
+	// Check files exist
+	if _, err := os.Stat(jobsPath); os.IsNotExist(err) {
+		fmt.Printf("Error: jobs file not found: %s\n", jobsPath)
+		os.Exit(1)
+	}
+	if _, err := os.Stat(invoicesPath); os.IsNotExist(err) {
+		fmt.Printf("Error: invoices file not found: %s\n", invoicesPath)
+		os.Exit(1)
+	}
+
+	runImport(ctx, db, jobsPath, invoicesPath)
+}
+
+func handleList(ctx context.Context, db *sql.DB) {
+	listImports(ctx, db)
+}
+
+func handleReport(ctx context.Context, db *sql.DB, args []string) {
+	if len(args) < 1 {
+		fmt.Println("Error: report requires a report type")
+		fmt.Println("Available reports: job-types, campaigns, customers")
+		os.Exit(1)
+	}
+
+	reportType := args[0]
+	reportArgs := args[1:]
+
+	switch reportType {
+	case "job-types":
+		reportJobTypes(ctx, db)
+	case "campaigns":
+		reportCampaigns(ctx, db)
+	case "customers":
+		reportCustomers(ctx, db, reportArgs)
+	default:
+		fmt.Printf("Unknown report type: %s\n", reportType)
+		fmt.Println("Available reports: job-types, campaigns, customers")
+		os.Exit(1)
+	}
+}
