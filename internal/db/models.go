@@ -49,24 +49,24 @@ type Invoice struct {
 	InvoiceStatus      sql.NullString  `json:"invoice_status"`
 	InvoiceType        sql.NullString  `json:"invoice_type"`
 	InvoiceSummary     sql.NullString  `json:"invoice_summary"`
-	Total              decimal.Decimal `json:"amount"`
-	Balance            decimal.Decimal `json:"amount"`
-	Payments           decimal.Decimal `json:"amount"`
-	MaterialCosts      decimal.Decimal `json:"amount"`
-	EquipmentCosts     decimal.Decimal `json:"amount"`
-	PurchaseOrderCosts decimal.Decimal `json:"amount"`
-	ReturnCosts        decimal.Decimal `json:"amount"`
-	CostsTotal         decimal.Decimal `json:"amount"`
-	MaterialRetail     decimal.Decimal `json:"amount"`
-	MaterialMarkup     decimal.Decimal `json:"amount"`
-	EquipmentRetail    decimal.Decimal `json:"amount"`
-	EquipmentMarkup    decimal.Decimal `json:"amount"`
-	Labor              decimal.Decimal `json:"amount"`
-	LaborPay           decimal.Decimal `json:"amount"`
-	LaborBurden        decimal.Decimal `json:"amount"`
-	TotalLaborCosts    decimal.Decimal `json:"amount"`
-	Income             decimal.Decimal `json:"amount"`
-	DiscountTotal      decimal.Decimal `json:"amount"`
+	Total              decimal.Decimal `json:"total"`
+	Balance            decimal.Decimal `json:"balance"`
+	Payments           decimal.Decimal `json:"payments"`
+	MaterialCosts      decimal.Decimal `json:"material_costs"`
+	EquipmentCosts     decimal.Decimal `json:"equipment_costs"`
+	PurchaseOrderCosts decimal.Decimal `json:"purchase_order_costs"`
+	ReturnCosts        decimal.Decimal `json:"return_costs"`
+	CostsTotal         decimal.Decimal `json:"costs_total"`
+	MaterialRetail     decimal.Decimal `json:"material_retail"`
+	MaterialMarkup     decimal.Decimal `json:"material_markup"`
+	EquipmentRetail    decimal.Decimal `json:"equipment_retail"`
+	EquipmentMarkup    decimal.Decimal `json:"equipment_markup"`
+	Labor              decimal.Decimal `json:"labor"`
+	LaborPay           decimal.Decimal `json:"labor_pay"`
+	LaborBurden        decimal.Decimal `json:"labor_burden"`
+	TotalLaborCosts    decimal.Decimal `json:"total_labor_costs"`
+	Income             decimal.Decimal `json:"income"`
+	DiscountTotal      decimal.Decimal `json:"discount_total"`
 	IsAdjustment       bool            `json:"is_adjustment"`
 	CreatedAt          time.Time       `json:"created_at"`
 }
@@ -87,10 +87,10 @@ type Job struct {
 	CampaignName       sql.NullString  `json:"campaign_name"`
 	CampaignCategory   sql.NullString  `json:"campaign_category"`
 	CallCampaign       sql.NullString  `json:"call_campaign"`
-	JobsSubtotal       decimal.Decimal `json:"amount"`
-	JobTotal           decimal.Decimal `json:"amount"`
+	JobsSubtotal       decimal.Decimal `json:"jobs_subtotal"`
+	JobTotal           decimal.Decimal `json:"job_total"`
 	InvoiceID          sql.NullInt64   `json:"invoice_id"`
-	TotalHoursWorked   decimal.Decimal `json:"amount"`
+	TotalHoursWorked   decimal.Decimal `json:"total_hours_worked"`
 	Priority           sql.NullString  `json:"priority"`
 	SurveyScore        sql.NullInt32   `json:"survey_score"`
 	CreatedAt          time.Time       `json:"created_at"`
@@ -98,10 +98,10 @@ type Job struct {
 
 type JobMetric struct {
 	JobID          int64           `json:"job_id"`
-	Revenue        decimal.Decimal `json:"amount"`
-	TotalCosts     decimal.Decimal `json:"amount"`
-	GrossProfit    decimal.Decimal `json:"amount"`
-	GrossMarginPct decimal.Decimal `json:"amount"`
+	Revenue        string          `json:"revenue"`
+	TotalCosts     string          `json:"total_costs"`
+	GrossProfit    string          `json:"gross_profit"`
+	GrossMarginPct decimal.Decimal `json:"gross_margin_pct"`
 	InvoiceCount   int32           `json:"invoice_count"`
 	HasAdjustment  bool            `json:"has_adjustment"`
 	CalculatedAt   time.Time       `json:"calculated_at"`

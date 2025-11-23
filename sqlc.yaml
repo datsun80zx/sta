@@ -20,4 +20,3 @@ sql:
               import: "github.com/shopspring/decimal"
               type: "Decimal"
             nullable: true
-            go_struct_tag: 'json:"amount"'

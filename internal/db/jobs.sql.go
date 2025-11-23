@@ -43,10 +43,10 @@ type CreateJobParams struct {
 	CampaignName       sql.NullString  `json:"campaign_name"`
 	CampaignCategory   sql.NullString  `json:"campaign_category"`
 	CallCampaign       sql.NullString  `json:"call_campaign"`
-	JobsSubtotal       decimal.Decimal `json:"amount"`
-	JobTotal           decimal.Decimal `json:"amount"`
+	JobsSubtotal       decimal.Decimal `json:"jobs_subtotal"`
+	JobTotal           decimal.Decimal `json:"job_total"`
 	InvoiceID          sql.NullInt64   `json:"invoice_id"`
-	TotalHoursWorked   decimal.Decimal `json:"amount"`
+	TotalHoursWorked   decimal.Decimal `json:"total_hours_worked"`
 	Priority           sql.NullString  `json:"priority"`
 	SurveyScore        sql.NullInt32   `json:"survey_score"`
 }

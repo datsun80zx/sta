@@ -36,24 +36,24 @@ type CreateInvoiceParams struct {
 	InvoiceStatus      sql.NullString  `json:"invoice_status"`
 	InvoiceType        sql.NullString  `json:"invoice_type"`
 	InvoiceSummary     sql.NullString  `json:"invoice_summary"`
-	Total              decimal.Decimal `json:"amount"`
-	Balance            decimal.Decimal `json:"amount"`
-	Payments           decimal.Decimal `json:"amount"`
-	MaterialCosts      decimal.Decimal `json:"amount"`
-	EquipmentCosts     decimal.Decimal `json:"amount"`
-	PurchaseOrderCosts decimal.Decimal `json:"amount"`
-	ReturnCosts        decimal.Decimal `json:"amount"`
-	CostsTotal         decimal.Decimal `json:"amount"`
-	MaterialRetail     decimal.Decimal `json:"amount"`
-	MaterialMarkup     decimal.Decimal `json:"amount"`
-	EquipmentRetail    decimal.Decimal `json:"amount"`
-	EquipmentMarkup    decimal.Decimal `json:"amount"`
-	Labor              decimal.Decimal `json:"amount"`
-	LaborPay           decimal.Decimal `json:"amount"`
-	LaborBurden        decimal.Decimal `json:"amount"`
-	TotalLaborCosts    decimal.Decimal `json:"amount"`
-	Income             decimal.Decimal `json:"amount"`
-	DiscountTotal      decimal.Decimal `json:"amount"`
+	Total              decimal.Decimal `json:"total"`
+	Balance            decimal.Decimal `json:"balance"`
+	Payments           decimal.Decimal `json:"payments"`
+	MaterialCosts      decimal.Decimal `json:"material_costs"`
+	EquipmentCosts     decimal.Decimal `json:"equipment_costs"`
+	PurchaseOrderCosts decimal.Decimal `json:"purchase_order_costs"`
+	ReturnCosts        decimal.Decimal `json:"return_costs"`
+	CostsTotal         decimal.Decimal `json:"costs_total"`
+	MaterialRetail     decimal.Decimal `json:"material_retail"`
+	MaterialMarkup     decimal.Decimal `json:"material_markup"`
+	EquipmentRetail    decimal.Decimal `json:"equipment_retail"`
+	EquipmentMarkup    decimal.Decimal `json:"equipment_markup"`
+	Labor              decimal.Decimal `json:"labor"`
+	LaborPay           decimal.Decimal `json:"labor_pay"`
+	LaborBurden        decimal.Decimal `json:"labor_burden"`
+	TotalLaborCosts    decimal.Decimal `json:"total_labor_costs"`
+	Income             decimal.Decimal `json:"income"`
+	DiscountTotal      decimal.Decimal `json:"discount_total"`
 	IsAdjustment       bool            `json:"is_adjustment"`
 }
 
