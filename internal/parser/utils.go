@@ -23,6 +23,11 @@ func parseInt64(s string, rowNum int, columnName string) (int64, error) {
 	s = strings.ReplaceAll(s, ",", "")
 	s = strings.TrimSpace(s)
 
+	if strings.Contains(s, "-") {
+		parts := strings.Split(s, "-")
+		s = parts[0]
+	}
+
 	val, err := strconv.ParseInt(s, 10, 64)
 	if err != nil {
 		return 0, &ValidationError{
@@ -95,10 +100,29 @@ func parseNullableDecimal(s string) *decimal.Decimal {
 }
 
 // cleanCurrency removes $ and commas from currency strings
+// Also handles accounting notation: (123.45) → -123.45
 func cleanCurrency(s string) string {
+	s = strings.TrimSpace(s)
+
+	// Handle accounting notation for negative numbers: (5517.95) means -5517.95
+	isNegative := false
+	if strings.HasPrefix(s, "(") && strings.HasSuffix(s, ")") {
+		isNegative = true
+		s = strings.TrimPrefix(s, "(")
+		s = strings.TrimSuffix(s, ")")
+		s = strings.TrimSpace(s)
+	}
+
+	// Remove currency symbols and formatting
 	s = strings.ReplaceAll(s, "$", "")
 	s = strings.ReplaceAll(s, ",", "")
 	s = strings.TrimSpace(s)
+
+	// Add negative sign if needed
+	if isNegative && s != "" && s != "0" && s != "0.00" {
+		s = "-" + s
+	}
+
 	return s
 }
 

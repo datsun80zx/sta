@@ -12,7 +12,7 @@ type JobRow struct {
 	JobID      int64
 	CustomerID int64
 	LocationID *int64
-	InvoiceID  *int64
+	InvoiceID  *string // Changed from *int64 to *string
 
 	// Customer info
 	CustomerName  *string
@@ -72,7 +72,7 @@ type JobRow struct {
 // InvoiceRow represents a parsed row from the Invoices report
 type InvoiceRow struct {
 	// Core identifiers
-	InvoiceID             int64
+	InvoiceID             string // Changed from int64 to string
 	JobID                 int64
 	CustomerID            *int64
 	LocationID            *int64
