@@ -26,7 +26,7 @@ CREATE INDEX idx_import_batches_imported_at
 -- Customers (deduplicated by ServiceTitan Customer ID)
 CREATE TABLE customers (
     id BIGINT PRIMARY KEY, -- ServiceTitan Customer ID
-    customer_name TEXT,
+    customer_name TEXT NOT NULL,
     customer_type TEXT CHECK (customer_type IN ('Residential', 'Commercial')),
     customer_city TEXT,
     customer_state TEXT,
@@ -47,13 +47,13 @@ CREATE INDEX idx_customers_last_job_date ON customers(last_job_date DESC);
 -- Jobs (one row per ServiceTitan Job ID)
 CREATE TABLE jobs (
     id BIGINT PRIMARY KEY, -- ServiceTitan Job ID
-    customer_id BIGINT REFERENCES customers(id),
-    import_batch_id BIGINT REFERENCES import_batches(id),
+    customer_id BIGINT NOT NULL REFERENCES customers(id),
+    import_batch_id BIGINT NOT NULL REFERENCES import_batches(id),
     
     -- Job details
-    job_type TEXT,
+    job_type TEXT NOT NULL,
     business_unit TEXT,
-    status TEXT CHECK (status IN ('Scheduled', 'In Progress', 'On Hold', 'Canceled', 'Completed')),
+    status TEXT NOT NULL CHECK (status IN ('Scheduled', 'In Progress', 'On Hold', 'Canceled', 'Completed')),
     
     -- Dates
     job_creation_date DATE,
@@ -93,11 +93,11 @@ CREATE INDEX idx_jobs_campaign_category ON jobs(campaign_category);
 -- Invoices (one row per ServiceTitan Invoice #)
 CREATE TABLE invoices (
     id BIGINT PRIMARY KEY, -- ServiceTitan Invoice #
-    job_id BIGINT REFERENCES jobs(id),
+    job_id BIGINT NOT NULL REFERENCES jobs(id),
     import_batch_id BIGINT NOT NULL REFERENCES import_batches(id),
     
     -- Invoice details
-    invoice_date DATE,
+    invoice_date DATE NOT NULL,
     invoice_status TEXT,
     invoice_type TEXT,
     invoice_summary TEXT,

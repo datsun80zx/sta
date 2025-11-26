@@ -101,7 +101,7 @@ func (p *CSVParser) parseJobRow(record []string, colMap map[string]int, rowNum i
 	var err error
 
 	// Required fields
-	job.JobID, err = parseInt64(getField(record, colMap, "job id"), rowNum, "Job ID")
+	job.JobID, err = parseRequiredString(getField(record, colMap, "job id"), rowNum, "Job ID")
 	if err != nil {
 		return job, err
 	}
@@ -178,7 +178,7 @@ func (p *CSVParser) parseJobRow(record []string, colMap map[string]int, rowNum i
 	job.CampaignCategory = parseNullableString(getField(record, colMap, "campaign category"))
 
 	// Invoice reference
-	job.InvoiceID = parseNullableInt64(getField(record, colMap, "invoice id"))
+	job.InvoiceID = parseNullableString(getField(record, colMap, "invoice id"))
 
 	// Other fields
 	job.Summary = parseNullableString(getField(record, colMap, "summary"))
@@ -204,12 +204,12 @@ func (p *CSVParser) parseInvoiceRow(record []string, colMap map[string]int, rowN
 	var err error
 
 	// Required fields
-	invoice.InvoiceID, err = parseInt64(getField(record, colMap, "invoice #"), rowNum, "Invoice #")
+	invoice.InvoiceID, err = parseRequiredString(getField(record, colMap, "invoice #"), rowNum, "Invoice #")
 	if err != nil {
 		return invoice, err
 	}
 
-	invoice.JobID, err = parseInt64(getField(record, colMap, "job #"), rowNum, "Job #")
+	invoice.JobID, err = parseRequiredString(getField(record, colMap, "job #"), rowNum, "Job #")
 	if err != nil {
 		return invoice, err
 	}

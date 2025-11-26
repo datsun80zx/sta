@@ -9,6 +9,19 @@ import (
 	"github.com/shopspring/decimal"
 )
 
+func parseRequiredString(s string, rowNum int, columnName string) (string, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return "", &ValidationError{
+			Row:    rowNum,
+			Column: columnName,
+			Value:  s,
+			Err:    fmt.Errorf("required field is empty"),
+		}
+	}
+	return s, nil
+}
+
 // parseInt64 parses a string to int64, returning ValidationError on failure
 func parseInt64(s string, rowNum int, columnName string) (int64, error) {
 	if s == "" {

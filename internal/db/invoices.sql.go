@@ -29,8 +29,8 @@ RETURNING id, job_id, import_batch_id, invoice_date, invoice_status, invoice_typ
 `
 
 type CreateInvoiceParams struct {
-	ID                 int64           `json:"id"`
-	JobID              int64           `json:"job_id"`
+	ID                 string          `json:"id"`
+	JobID              string          `json:"job_id"`
 	ImportBatchID      int64           `json:"import_batch_id"`
 	InvoiceDate        time.Time       `json:"invoice_date"`
 	InvoiceStatus      sql.NullString  `json:"invoice_status"`
@@ -125,7 +125,7 @@ WHERE job_id = $1
 ORDER BY invoice_date DESC
 `
 
-func (q *Queries) GetInvoicesForJob(ctx context.Context, jobID int64) ([]Invoice, error) {
+func (q *Queries) GetInvoicesForJob(ctx context.Context, jobID string) ([]Invoice, error) {
 	rows, err := q.db.QueryContext(ctx, getInvoicesForJob, jobID)
 	if err != nil {
 		return nil, err

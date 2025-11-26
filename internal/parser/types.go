@@ -9,7 +9,7 @@ import (
 // JobRow represents a parsed row from the Jobs report
 type JobRow struct {
 	// Core identifiers
-	JobID      int64
+	JobID      string
 	CustomerID int64
 	LocationID *int64
 	InvoiceID  *string // Changed from *int64 to *string
@@ -73,7 +73,7 @@ type JobRow struct {
 type InvoiceRow struct {
 	// Core identifiers
 	InvoiceID             string // Changed from int64 to string
-	JobID                 int64
+	JobID                 string
 	CustomerID            *int64
 	LocationID            *int64
 	ProjectNumber         *int64

@@ -42,8 +42,8 @@ type ImportBatch struct {
 }
 
 type Invoice struct {
-	ID                 int64           `json:"id"`
-	JobID              int64           `json:"job_id"`
+	ID                 string          `json:"id"`
+	JobID              string          `json:"job_id"`
 	ImportBatchID      int64           `json:"import_batch_id"`
 	InvoiceDate        time.Time       `json:"invoice_date"`
 	InvoiceStatus      sql.NullString  `json:"invoice_status"`
@@ -72,7 +72,7 @@ type Invoice struct {
 }
 
 type Job struct {
-	ID                 int64           `json:"id"`
+	ID                 string          `json:"id"`
 	CustomerID         int64           `json:"customer_id"`
 	ImportBatchID      int64           `json:"import_batch_id"`
 	JobType            string          `json:"job_type"`
@@ -89,7 +89,7 @@ type Job struct {
 	CallCampaign       sql.NullString  `json:"call_campaign"`
 	JobsSubtotal       decimal.Decimal `json:"jobs_subtotal"`
 	JobTotal           decimal.Decimal `json:"job_total"`
-	InvoiceID          sql.NullInt64   `json:"invoice_id"`
+	InvoiceID          sql.NullString  `json:"invoice_id"`
 	TotalHoursWorked   decimal.Decimal `json:"total_hours_worked"`
 	Priority           sql.NullString  `json:"priority"`
 	SurveyScore        sql.NullInt32   `json:"survey_score"`
@@ -97,7 +97,7 @@ type Job struct {
 }
 
 type JobMetric struct {
-	JobID          int64           `json:"job_id"`
+	JobID          string          `json:"job_id"`
 	Revenue        string          `json:"revenue"`
 	TotalCosts     string          `json:"total_costs"`
 	GrossProfit    string          `json:"gross_profit"`

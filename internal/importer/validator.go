@@ -10,7 +10,7 @@ import (
 
 // ValidationResult contains validation warnings and errors
 type ValidationResult struct {
-	JobsWithoutInvoices []int64
+	JobsWithoutInvoices []string
 	Warnings            []string
 }
 
@@ -19,7 +19,7 @@ func ValidateImport(ctx context.Context, tx *sql.Tx, batchID int64) (*Validation
 	queries := db.New(tx) // FIX: Pass tx to db.New()
 
 	result := &ValidationResult{
-		JobsWithoutInvoices: make([]int64, 0),
+		JobsWithoutInvoices: make([]string, 0),
 		Warnings:            make([]string, 0),
 	}
 

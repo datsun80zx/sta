@@ -28,7 +28,7 @@ RETURNING id, customer_id, import_batch_id, job_type, business_unit, status, job
 `
 
 type CreateJobParams struct {
-	ID                 int64           `json:"id"`
+	ID                 string          `json:"id"`
 	CustomerID         int64           `json:"customer_id"`
 	ImportBatchID      int64           `json:"import_batch_id"`
 	JobType            string          `json:"job_type"`
@@ -45,7 +45,7 @@ type CreateJobParams struct {
 	CallCampaign       sql.NullString  `json:"call_campaign"`
 	JobsSubtotal       decimal.Decimal `json:"jobs_subtotal"`
 	JobTotal           decimal.Decimal `json:"job_total"`
-	InvoiceID          sql.NullInt64   `json:"invoice_id"`
+	InvoiceID          sql.NullString  `json:"invoice_id"`
 	TotalHoursWorked   decimal.Decimal `json:"total_hours_worked"`
 	Priority           sql.NullString  `json:"priority"`
 	SurveyScore        sql.NullInt32   `json:"survey_score"`
@@ -112,7 +112,7 @@ AND j.import_batch_id = $1
 `
 
 type GetJobsWithoutInvoicesRow struct {
-	ID         int64  `json:"id"`
+	ID         string `json:"id"`
 	JobType    string `json:"job_type"`
 	CustomerID int64  `json:"customer_id"`
 }

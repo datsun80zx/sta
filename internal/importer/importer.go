@@ -297,7 +297,7 @@ func (i *Importer) importJobs(ctx context.Context, tx *sql.Tx, jobs []parser.Job
 			CallCampaign:       sqlNullString(stringFromInt64Ptr(job.CallCampaignID)),
 			JobsSubtotal:       decimalOrZero(job.JobsSubtotal),
 			JobTotal:           decimalOrZero(job.JobTotal),
-			InvoiceID:          sqlNullInt64(job.InvoiceID),
+			InvoiceID:          sqlNullString(job.InvoiceID),
 			TotalHoursWorked:   decimalOrZero(job.TotalHoursWorked),
 			Priority:           sqlNullString(job.Priority),
 			SurveyScore:        sqlNullInt32FromDecimal(job.SurveyResult),
@@ -305,7 +305,7 @@ func (i *Importer) importJobs(ctx context.Context, tx *sql.Tx, jobs []parser.Job
 
 		_, err := txQueries.CreateJob(ctx, params) // FIX: Remove tx parameter, use txQueries
 		if err != nil {
-			return fmt.Errorf("failed to insert job %d (row %d): %w", job.JobID, idx+2, err)
+			return fmt.Errorf("failed to insert job %v (row %d): %w", job.JobID, idx+2, err)
 		}
 	}
 
@@ -349,7 +349,7 @@ func (i *Importer) importInvoices(ctx context.Context, tx *sql.Tx, invoices []pa
 
 		_, err := txQueries.CreateInvoice(ctx, params) // FIX: Remove tx parameter, use txQueries
 		if err != nil {
-			return fmt.Errorf("failed to insert invoice %d (row %d): %w", invoice.InvoiceID, idx+2, err)
+			return fmt.Errorf("failed to insert invoice %v (row %d): %w", invoice.InvoiceID, idx+2, err)
 		}
 	}
 
@@ -372,12 +372,12 @@ func sqlNullString(s *string) sql.NullString {
 	return sql.NullString{String: *s, Valid: true}
 }
 
-func sqlNullInt64(i *int64) sql.NullInt64 {
-	if i == nil {
-		return sql.NullInt64{Valid: false}
-	}
-	return sql.NullInt64{Int64: *i, Valid: true}
-}
+// func sqlNullInt64(i *int64) sql.NullInt64 {
+// 	if i == nil {
+// 		return sql.NullInt64{Valid: false}
+// 	}
+// 	return sql.NullInt64{Int64: *i, Valid: true}
+// }
 
 // func sqlNullInt32(i *int32) sql.NullInt32 {
 // 	if i == nil {
