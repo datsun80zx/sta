@@ -34,6 +34,9 @@ func runImport(ctx context.Context, db *sql.DB, jobsPath, invoicesPath string) {
 	fmt.Printf("Batch ID:           %d\n", result.BatchID)
 	fmt.Printf("Jobs imported:      %d\n", result.JobsImported)
 	fmt.Printf("Invoices imported:  %d\n", result.InvoicesImported)
+	if result.InvoicesSkipped > 0 {
+		fmt.Printf("Invoices skipped:   %d (no matching job)\n", result.InvoicesSkipped)
+	}
 	fmt.Printf("Customers upserted: %d\n", result.CustomersUpserted)
 	fmt.Printf("Metrics calculated: %d\n", result.MetricsCalculated)
 	fmt.Printf("Duration:           %v\n", result.Duration.Round(time.Millisecond))

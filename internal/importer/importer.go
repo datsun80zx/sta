@@ -24,7 +24,7 @@ type Importer struct {
 func NewImporter(database *sql.DB) *Importer {
 	return &Importer{
 		db:      database,
-		queries: db.New(database), // FIX: Pass database to db.New()
+		queries: db.New(database),
 	}
 }
 
@@ -33,6 +33,7 @@ type ImportResult struct {
 	BatchID           int64
 	JobsImported      int
 	InvoicesImported  int
+	InvoicesSkipped   int
 	CustomersUpserted int
 	MetricsCalculated int
 	ValidationResult  *ValidationResult
@@ -51,7 +52,7 @@ func (i *Importer) ImportFiles(ctx context.Context, jobsPath, invoicesPath strin
 	}
 
 	// Step 2: Check if already imported
-	existingBatch, err := i.queries.GetImportBatchByHashes(ctx, db.GetImportBatchByHashesParams{ // FIX: Remove i.db parameter
+	existingBatch, err := i.queries.GetImportBatchByHashes(ctx, db.GetImportBatchByHashesParams{
 		JobReportHash:     jobsHash,
 		InvoiceReportHash: invoicesHash,
 	})
@@ -80,11 +81,10 @@ func (i *Importer) ImportFiles(ctx context.Context, jobsPath, invoicesPath strin
 	}
 	defer tx.Rollback() // Rollback if not committed
 
-	// FIX: Create transaction-scoped queries object
 	txQueries := db.New(tx)
 
 	// Step 5: Create import batch
-	batch, err := txQueries.CreateImportBatch(ctx, db.CreateImportBatchParams{ // FIX: Remove tx parameter, use txQueries
+	batch, err := txQueries.CreateImportBatch(ctx, db.CreateImportBatchParams{
 		JobReportFilename:     filepath.Base(jobsPath),
 		InvoiceReportFilename: filepath.Base(invoicesPath),
 		JobReportHash:         jobsHash,
@@ -100,7 +100,7 @@ func (i *Importer) ImportFiles(ctx context.Context, jobsPath, invoicesPath strin
 	// Step 6: Import customers (upsert from job data)
 	customersUpserted, err := i.importCustomers(ctx, tx, jobs)
 	if err != nil {
-		txQueries.UpdateImportBatchStatus(ctx, db.UpdateImportBatchStatusParams{ // FIX: Remove tx parameter, use txQueries
+		txQueries.UpdateImportBatchStatus(ctx, db.UpdateImportBatchStatusParams{
 			ID:           batch.ID,
 			Status:       "failed",
 			ErrorMessage: sql.NullString{String: err.Error(), Valid: true},
@@ -108,10 +108,10 @@ func (i *Importer) ImportFiles(ctx context.Context, jobsPath, invoicesPath strin
 		return nil, fmt.Errorf("failed to import customers: %w", err)
 	}
 
-	// Step 7: Import jobs
-	err = i.importJobs(ctx, tx, jobs, batch.ID)
+	// Step 7: Import jobs and get the set of valid job IDs
+	validJobIDs, err := i.importJobs(ctx, tx, jobs, batch.ID)
 	if err != nil {
-		txQueries.UpdateImportBatchStatus(ctx, db.UpdateImportBatchStatusParams{ // FIX: Remove tx parameter, use txQueries
+		txQueries.UpdateImportBatchStatus(ctx, db.UpdateImportBatchStatusParams{
 			ID:           batch.ID,
 			Status:       "failed",
 			ErrorMessage: sql.NullString{String: err.Error(), Valid: true},
@@ -119,10 +119,10 @@ func (i *Importer) ImportFiles(ctx context.Context, jobsPath, invoicesPath strin
 		return nil, fmt.Errorf("failed to import jobs: %w", err)
 	}
 
-	// Step 8: Import invoices
-	err = i.importInvoices(ctx, tx, invoices, batch.ID)
+	// Step 8: Import invoices (skip those without matching jobs)
+	invoicesImported, invoicesSkipped, skippedJobIDs, err := i.importInvoices(ctx, tx, invoices, batch.ID, validJobIDs)
 	if err != nil {
-		txQueries.UpdateImportBatchStatus(ctx, db.UpdateImportBatchStatusParams{ // FIX: Remove tx parameter, use txQueries
+		txQueries.UpdateImportBatchStatus(ctx, db.UpdateImportBatchStatusParams{
 			ID:           batch.ID,
 			Status:       "failed",
 			ErrorMessage: sql.NullString{String: err.Error(), Valid: true},
@@ -133,7 +133,7 @@ func (i *Importer) ImportFiles(ctx context.Context, jobsPath, invoicesPath strin
 	// Step 9: Validate data
 	validationResult, err := ValidateImport(ctx, tx, batch.ID)
 	if err != nil {
-		txQueries.UpdateImportBatchStatus(ctx, db.UpdateImportBatchStatusParams{ // FIX: Remove tx parameter, use txQueries
+		txQueries.UpdateImportBatchStatus(ctx, db.UpdateImportBatchStatusParams{
 			ID:           batch.ID,
 			Status:       "failed",
 			ErrorMessage: sql.NullString{String: err.Error(), Valid: true},
@@ -141,10 +141,17 @@ func (i *Importer) ImportFiles(ctx context.Context, jobsPath, invoicesPath strin
 		return nil, fmt.Errorf("validation failed: %w", err)
 	}
 
+	// Add skipped invoices warning if any were skipped
+	if invoicesSkipped > 0 {
+		validationResult.Warnings = append(validationResult.Warnings,
+			fmt.Sprintf("Skipped %d invoices referencing %d jobs not in jobs report",
+				invoicesSkipped, len(skippedJobIDs)))
+	}
+
 	// Step 10: Calculate job metrics
-	err = txQueries.CalculateJobMetrics(ctx, batch.ID) // FIX: Remove tx parameter, use txQueries
+	err = txQueries.CalculateJobMetrics(ctx, batch.ID)
 	if err != nil {
-		txQueries.UpdateImportBatchStatus(ctx, db.UpdateImportBatchStatusParams{ // FIX: Remove tx parameter, use txQueries
+		txQueries.UpdateImportBatchStatus(ctx, db.UpdateImportBatchStatusParams{
 			ID:           batch.ID,
 			Status:       "failed",
 			ErrorMessage: sql.NullString{String: err.Error(), Valid: true},
@@ -153,7 +160,7 @@ func (i *Importer) ImportFiles(ctx context.Context, jobsPath, invoicesPath strin
 	}
 
 	// Step 11: Mark batch as success
-	err = txQueries.UpdateImportBatchStatus(ctx, db.UpdateImportBatchStatusParams{ // FIX: Remove tx parameter, use txQueries
+	err = txQueries.UpdateImportBatchStatus(ctx, db.UpdateImportBatchStatusParams{
 		ID:           batch.ID,
 		Status:       "success",
 		ErrorMessage: sql.NullString{Valid: false},
@@ -172,7 +179,8 @@ func (i *Importer) ImportFiles(ctx context.Context, jobsPath, invoicesPath strin
 	return &ImportResult{
 		BatchID:           batch.ID,
 		JobsImported:      len(jobs),
-		InvoicesImported:  len(invoices),
+		InvoicesImported:  invoicesImported,
+		InvoicesSkipped:   invoicesSkipped,
 		CustomersUpserted: customersUpserted,
 		MetricsCalculated: metricsCount,
 		ValidationResult:  validationResult,
@@ -214,7 +222,6 @@ func (i *Importer) parseFiles(jobsPath, invoicesPath string) ([]parser.JobRow, [
 
 // importCustomers upserts customer records from job data
 func (i *Importer) importCustomers(ctx context.Context, tx *sql.Tx, jobs []parser.JobRow) (int, error) {
-	// FIX: Create transaction-scoped queries object
 	txQueries := db.New(tx)
 
 	// Build unique set of customers
@@ -263,7 +270,7 @@ func (i *Importer) importCustomers(ctx context.Context, tx *sql.Tx, jobs []parse
 			LastJobDate:   sqlNullTime(lastJobDate),
 		}
 
-		_, err := txQueries.UpsertCustomer(ctx, params) // FIX: Remove tx parameter, use txQueries
+		_, err := txQueries.UpsertCustomer(ctx, params)
 		if err != nil {
 			return count, fmt.Errorf("failed to upsert customer %d: %w", customerID, err)
 		}
@@ -273,10 +280,10 @@ func (i *Importer) importCustomers(ctx context.Context, tx *sql.Tx, jobs []parse
 	return count, nil
 }
 
-// importJobs inserts job records
-func (i *Importer) importJobs(ctx context.Context, tx *sql.Tx, jobs []parser.JobRow, batchID int64) error {
-	// FIX: Create transaction-scoped queries object
+// importJobs inserts job records and returns the set of valid job IDs
+func (i *Importer) importJobs(ctx context.Context, tx *sql.Tx, jobs []parser.JobRow, batchID int64) (map[string]bool, error) {
 	txQueries := db.New(tx)
+	validJobIDs := make(map[string]bool)
 
 	for idx, job := range jobs {
 		params := db.CreateJobParams{
@@ -303,21 +310,32 @@ func (i *Importer) importJobs(ctx context.Context, tx *sql.Tx, jobs []parser.Job
 			SurveyScore:        sqlNullInt32FromDecimal(job.SurveyResult),
 		}
 
-		_, err := txQueries.CreateJob(ctx, params) // FIX: Remove tx parameter, use txQueries
+		_, err := txQueries.CreateJob(ctx, params)
 		if err != nil {
-			return fmt.Errorf("failed to insert job %v (row %d): %w", job.JobID, idx+2, err)
+			return nil, fmt.Errorf("failed to insert job %v (row %d): %w", job.JobID, idx+2, err)
 		}
+		validJobIDs[job.JobID] = true
 	}
 
-	return nil
+	return validJobIDs, nil
 }
 
-// importInvoices inserts invoice records
-func (i *Importer) importInvoices(ctx context.Context, tx *sql.Tx, invoices []parser.InvoiceRow, batchID int64) error {
-	// FIX: Create transaction-scoped queries object
+// importInvoices inserts invoice records, skipping those without matching jobs
+// Returns: (imported count, skipped count, set of missing job IDs, error)
+func (i *Importer) importInvoices(ctx context.Context, tx *sql.Tx, invoices []parser.InvoiceRow, batchID int64, validJobIDs map[string]bool) (int, int, map[string]bool, error) {
 	txQueries := db.New(tx)
+	imported := 0
+	skipped := 0
+	missingJobIDs := make(map[string]bool)
 
 	for idx, invoice := range invoices {
+		// Check if the job exists
+		if !validJobIDs[invoice.JobID] {
+			skipped++
+			missingJobIDs[invoice.JobID] = true
+			continue
+		}
+
 		params := db.CreateInvoiceParams{
 			ID:                 invoice.InvoiceID,
 			JobID:              invoice.JobID,
@@ -347,13 +365,14 @@ func (i *Importer) importInvoices(ctx context.Context, tx *sql.Tx, invoices []pa
 			IsAdjustment:       invoice.IsAdjustment,
 		}
 
-		_, err := txQueries.CreateInvoice(ctx, params) // FIX: Remove tx parameter, use txQueries
+		_, err := txQueries.CreateInvoice(ctx, params)
 		if err != nil {
-			return fmt.Errorf("failed to insert invoice %v (row %d): %w", invoice.InvoiceID, idx+2, err)
+			return imported, skipped, missingJobIDs, fmt.Errorf("failed to insert invoice %v (row %d): %w", invoice.InvoiceID, idx+2, err)
 		}
+		imported++
 	}
 
-	return nil
+	return imported, skipped, missingJobIDs, nil
 }
 
 // Helper functions for converting types
@@ -371,20 +390,6 @@ func sqlNullString(s *string) sql.NullString {
 	}
 	return sql.NullString{String: *s, Valid: true}
 }
-
-// func sqlNullInt64(i *int64) sql.NullInt64 {
-// 	if i == nil {
-// 		return sql.NullInt64{Valid: false}
-// 	}
-// 	return sql.NullInt64{Int64: *i, Valid: true}
-// }
-
-// func sqlNullInt32(i *int32) sql.NullInt32 {
-// 	if i == nil {
-// 		return sql.NullInt32{Valid: false}
-// 	}
-// 	return sql.NullInt32{Int32: *i, Valid: true}
-// }
 
 func sqlNullInt32FromDecimal(d *decimal.Decimal) sql.NullInt32 {
 	if d == nil {
