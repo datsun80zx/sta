@@ -37,7 +37,7 @@ func reportJobTypes(ctx context.Context, db *sql.DB) {
 		AvgRevenue   float64
 		AvgCosts     float64
 		AvgProfit    float64
-		AvgMarginPct float64
+		AvgMarginPct sql.NullFloat64
 		TotalProfit  float64
 	}
 
@@ -77,13 +77,18 @@ func reportJobTypes(ctx context.Context, db *sql.DB) {
 			jobType = jobType[:27] + "..."
 		}
 
-		fmt.Printf("%-30s  %6d  $%11.2f  $%11.2f  $%11.2f  %8.1f%%  $%13.2f\n",
+		marginStr := "N/A"
+		if r.AvgMarginPct.Valid {
+			marginStr = fmt.Sprintf("%8.1f%%", r.AvgMarginPct.Float64)
+		}
+
+		fmt.Printf("%-30s  %6d  $%11.2f  $%11.2f  $%11.2f  %9s  $%13.2f\n",
 			jobType,
 			r.JobCount,
 			r.AvgRevenue,
 			r.AvgCosts,
 			r.AvgProfit,
-			r.AvgMarginPct,
+			marginStr,
 			r.TotalProfit,
 		)
 	}
@@ -134,7 +139,7 @@ func reportCampaigns(ctx context.Context, db *sql.DB) {
 		AvgRevenue       float64
 		AvgCosts         float64
 		AvgProfit        float64
-		AvgMarginPct     float64
+		AvgMarginPct     sql.NullFloat64
 		TotalProfit      float64
 	}
 
@@ -165,7 +170,7 @@ func reportCampaigns(ctx context.Context, db *sql.DB) {
 
 	fmt.Println("Profitability by Campaign")
 	fmt.Println("════════════════════════════════════════════════════════════════════════════════════════════════════════")
-	fmt.Printf("%-25s  %-20s  %6s  %11s  %11s  %9s  %13s\n",
+	fmt.Printf("%-25s  %-20s  %6s  %11s  %9s  %13s  %11s\n",
 		"Campaign", "Category", "Jobs", "Avg Profit", "Margin %", "Total Profit", "Avg Revenue")
 	fmt.Println("────────────────────────────────────────────────────────────────────────────────────────────────────────")
 
@@ -179,12 +184,17 @@ func reportCampaigns(ctx context.Context, db *sql.DB) {
 			category = category[:17] + "..."
 		}
 
-		fmt.Printf("%-25s  %-20s  %6d  $%10.2f  %8.1f%%  $%12.2f  $%10.2f\n",
+		marginStr := "N/A"
+		if r.AvgMarginPct.Valid {
+			marginStr = fmt.Sprintf("%8.1f%%", r.AvgMarginPct.Float64)
+		}
+
+		fmt.Printf("%-25s  %-20s  %6d  $%10.2f  %9s  $%12.2f  $%10.2f\n",
 			campaign,
 			category,
 			r.JobCount,
 			r.AvgProfit,
-			r.AvgMarginPct,
+			marginStr,
 			r.TotalProfit,
 			r.AvgRevenue,
 		)
@@ -249,7 +259,7 @@ func reportCustomers(ctx context.Context, db *sql.DB, args []string) {
 		JobCount        int
 		AvgRevenue      float64
 		AvgProfitPerJob float64
-		AvgMarginPct    float64
+		AvgMarginPct    sql.NullFloat64
 		TotalProfit     float64
 	}
 
@@ -281,7 +291,7 @@ func reportCustomers(ctx context.Context, db *sql.DB, args []string) {
 
 	fmt.Printf("Top %d Customers by Profit\n", limit)
 	fmt.Println("════════════════════════════════════════════════════════════════════════════════════════════")
-	fmt.Printf("%-35s  %6s  %11s  %11s  %9s  %13s\n",
+	fmt.Printf("%-35s  %6s  %11s  %9s  %13s  %s\n",
 		"Customer", "Jobs", "Avg/Job", "Margin %", "Total Profit", "Type")
 	fmt.Println("────────────────────────────────────────────────────────────────────────────────────────────")
 
@@ -296,11 +306,16 @@ func reportCustomers(ctx context.Context, db *sql.DB, args []string) {
 			custType = r.CustomerType.String
 		}
 
-		fmt.Printf("%-35s  %6d  $%10.2f  %8.1f%%  $%12.2f  %s\n",
+		marginStr := "N/A"
+		if r.AvgMarginPct.Valid {
+			marginStr = fmt.Sprintf("%8.1f%%", r.AvgMarginPct.Float64)
+		}
+
+		fmt.Printf("%-35s  %6d  $%10.2f  %9s  $%12.2f  %s\n",
 			name,
 			r.JobCount,
 			r.AvgProfitPerJob,
-			r.AvgMarginPct,
+			marginStr,
 			r.TotalProfit,
 			custType,
 		)
