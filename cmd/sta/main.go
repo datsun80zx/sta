@@ -14,9 +14,16 @@ const usage = `ServiceTitan Profitability Analysis Tool
 Usage:
   sta import <jobs.csv> <invoices.csv>     Import ServiceTitan reports
   sta list                                  List import history
-  sta report job-types                      Show profitability by job type
-  sta report campaigns                      Show profitability by campaign
-  sta report customers [--top N]            Show top customers by profit
+  sta report job-types [--from DATE] [--to DATE]
+                                            Show profitability by job type
+  sta report campaigns [--from DATE] [--to DATE]
+                                            Show profitability by campaign
+  sta report customers [--top N] [--from DATE] [--to DATE]
+                                            Show top customers by profit
+
+Date Filtering:
+  --from YYYY-MM-DD    Include jobs completed on or after this date
+  --to YYYY-MM-DD      Include jobs completed on or before this date
 
 Database Configuration:
   Set DATABASE_URL environment variable:
@@ -26,12 +33,14 @@ Examples:
   sta import jobs_2024.csv invoices_2024.csv
   sta list
   sta report job-types
-  sta report customers --top 20
+  sta report job-types --from 2024-01-01 --to 2024-06-30
+  sta report campaigns --from 2024-07-01
+  sta report customers --top 20 --from 2024-01-01
 `
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Printf("report: %v\n\n", usage)
+		fmt.Print(usage)
 		os.Exit(1)
 	}
 
@@ -69,16 +78,16 @@ func main() {
 	case "report":
 		handleReport(ctx, db, os.Args[2:])
 	case "help", "-h", "--help":
-		fmt.Printf("report: %v\n\n", usage)
+		fmt.Print(usage)
 	default:
 		fmt.Printf("Unknown command: %s\n\n", command)
-		fmt.Printf("report: %v\n\n", usage)
+		fmt.Print(usage)
 		os.Exit(1)
 	}
 }
 
 func handleImport(ctx context.Context, db *sql.DB, args []string) {
-	if len(args) != 2 {
+	if len(args) < 2 {
 		fmt.Println("Error: import requires two arguments")
 		fmt.Println("Usage: sta import <jobs.csv> <invoices.csv>")
 		os.Exit(1)
@@ -116,9 +125,9 @@ func handleReport(ctx context.Context, db *sql.DB, args []string) {
 
 	switch reportType {
 	case "job-types":
-		reportJobTypes(ctx, db)
+		reportJobTypes(ctx, db, reportArgs)
 	case "campaigns":
-		reportCampaigns(ctx, db)
+		reportCampaigns(ctx, db, reportArgs)
 	case "customers":
 		reportCustomers(ctx, db, reportArgs)
 	default:
