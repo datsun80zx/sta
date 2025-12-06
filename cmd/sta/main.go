@@ -20,6 +20,8 @@ Usage:
                                             Show profitability by campaign
   sta report customers [--top N] [--from DATE] [--to DATE]
                                             Show top customers by profit
+  sta report red-flags <type> [options]     Identify profitability problems
+                                            Types: jobs, job-types, customers, high-revenue
 
 Date Filtering:
   --from YYYY-MM-DD    Include jobs completed on or after this date
@@ -36,6 +38,9 @@ Examples:
   sta report job-types --from 2024-01-01 --to 2024-06-30
   sta report campaigns --from 2024-07-01
   sta report customers --top 20 --from 2024-01-01
+  sta report red-flags jobs
+  sta report red-flags job-types --margin-threshold 15
+  sta report red-flags customers --from 2024-11-01
 `
 
 func main() {
@@ -130,9 +135,11 @@ func handleReport(ctx context.Context, db *sql.DB, args []string) {
 		reportCampaigns(ctx, db, reportArgs)
 	case "customers":
 		reportCustomers(ctx, db, reportArgs)
+	case "red-flags":
+		handleRedFlags(ctx, db, reportArgs)
 	default:
 		fmt.Printf("Unknown report type: %s\n", reportType)
-		fmt.Println("Available reports: job-types, campaigns, customers")
+		fmt.Println("Available reports: job-types, campaigns, customers, red-flags")
 		os.Exit(1)
 	}
 }
