@@ -14,6 +14,8 @@ const usage = `ServiceTitan Profitability Analysis Tool
 Usage:
   sta import <jobs.csv> <invoices.csv>     Import ServiceTitan reports
   sta list                                  List import history
+  sta report summary [--output FILE] [--from DATE] [--to DATE]
+                                            Generate HTML profitability report
   sta report job-types [--from DATE] [--to DATE]
                                             Show profitability by job type
   sta report campaigns [--from DATE] [--to DATE]
@@ -27,6 +29,9 @@ Date Filtering:
   --from YYYY-MM-DD    Include jobs completed on or after this date
   --to YYYY-MM-DD      Include jobs completed on or before this date
 
+Output Options:
+  --output FILE        Write report to FILE (default: profitability-report-DATE.html)
+
 Database Configuration:
   Set DATABASE_URL environment variable:
     export DATABASE_URL="postgres://user:pass@localhost/dbname?sslmode=disable"
@@ -34,6 +39,7 @@ Database Configuration:
 Examples:
   sta import jobs_2024.csv invoices_2024.csv
   sta list
+  sta report summary --output q4-report.html --from 2024-10-01 --to 2024-12-31
   sta report job-types
   sta report job-types --from 2024-01-01 --to 2024-06-30
   sta report campaigns --from 2024-07-01
@@ -121,7 +127,7 @@ func handleList(ctx context.Context, db *sql.DB) {
 func handleReport(ctx context.Context, db *sql.DB, args []string) {
 	if len(args) < 1 {
 		fmt.Println("Error: report requires a report type")
-		fmt.Println("Available reports: job-types, campaigns, customers")
+		fmt.Println("Available reports: summary, job-types, campaigns, customers, red-flags")
 		os.Exit(1)
 	}
 
@@ -129,6 +135,8 @@ func handleReport(ctx context.Context, db *sql.DB, args []string) {
 	reportArgs := args[1:]
 
 	switch reportType {
+	case "summary":
+		reportSummary(ctx, db, reportArgs)
 	case "job-types":
 		reportJobTypes(ctx, db, reportArgs)
 	case "campaigns":
@@ -139,7 +147,7 @@ func handleReport(ctx context.Context, db *sql.DB, args []string) {
 		handleRedFlags(ctx, db, reportArgs)
 	default:
 		fmt.Printf("Unknown report type: %s\n", reportType)
-		fmt.Println("Available reports: job-types, campaigns, customers, red-flags")
+		fmt.Println("Available reports: summary, job-types, campaigns, customers, red-flags")
 		os.Exit(1)
 	}
 }

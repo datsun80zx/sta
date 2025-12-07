@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Profitability Report</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            font-size: 12px;
+            line-height: 1.4;
+            color: #1a1a1a;
+            background: #fff;
+            padding: 0.5in;
+        }
+
+        /* Header */
+        .header {
+            border-bottom: 3px solid #2563eb;
+            padding-bottom: 16px;
+            margin-bottom: 24px;
+        }
+
+        .header h1 {
+            font-size: 24px;
+            font-weight: 700;
+            color: #1e3a5f;
+            margin-bottom: 4px;
+        }
+
+        .header .subtitle {
+            font-size: 14px;
+            color: #64748b;
+        }
+
+        .header .date-range {
+            font-size: 13px;
+            color: #475569;
+            margin-top: 8px;
+        }
+
+        /* Executive Summary */
+        .executive-summary {
+            background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 24px;
+        }
+
+        .executive-summary h2 {
+            font-size: 16px;
+            color: #1e3a5f;
+            margin-bottom: 16px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #cbd5e1;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+        }
+
+        .stat-card {
+            text-align: center;
+        }
+
+        .stat-card .label {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #64748b;
+            margin-bottom: 4px;
+        }
+
+        .stat-card .value {
+            font-size: 20px;
+            font-weight: 700;
+            color: #1e3a5f;
+        }
+
+        .stat-card .value.positive {
+            color: #16a34a;
+        }
+
+        .stat-card .value.negative {
+            color: #dc2626;
+        }
+
+        .stat-card .value.warning {
+            color: #d97706;
+        }
+
+        /* Section styling */
+        .section {
+            margin-bottom: 24px;
+            page-break-inside: avoid;
+        }
+
+        .section h2 {
+            font-size: 16px;
+            color: #1e3a5f;
+            margin-bottom: 12px;
+            padding-bottom: 6px;
+            border-bottom: 2px solid #e2e8f0;
+        }
+
+        /* Tables */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 11px;
+        }
+
+        thead {
+            background: #f8fafc;
+        }
+
+        th {
+            text-align: left;
+            padding: 10px 8px;
+            font-weight: 600;
+            color: #475569;
+            border-bottom: 2px solid #e2e8f0;
+            text-transform: uppercase;
+            font-size: 10px;
+            letter-spacing: 0.3px;
+        }
+
+        th.right,
+        td.right {
+            text-align: right;
+        }
+
+        td {
+            padding: 8px;
+            border-bottom: 1px solid #f1f5f9;
+            color: #334155;
+        }
+
+        tr:hover {
+            background: #f8fafc;
+        }
+
+        .money {
+            font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Mono', monospace;
+            font-size: 11px;
+        }
+
+        .money.positive {
+            color: #16a34a;
+        }
+
+        .money.negative {
+            color: #dc2626;
+        }
+
+        .percent {
+            font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Mono', monospace;
+        }
+
+        /* Red Flags section */
+        .red-flags {
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            border-radius: 8px;
+            padding: 16px;
+        }
+
+        .red-flags h2 {
+            color: #991b1b;
+            border-bottom-color: #fecaca;
+        }
+
+        .red-flags table thead {
+            background: #fee2e2;
+        }
+
+        .red-flags th {
+            color: #991b1b;
+        }
+
+        .no-issues {
+            text-align: center;
+            padding: 20px;
+            color: #16a34a;
+            font-weight: 500;
+        }
+
+        .no-issues::before {
+            content: "✓ ";
+        }
+
+        /* Footer */
+        .footer {
+            margin-top: 32px;
+            padding-top: 16px;
+            border-top: 1px solid #e2e8f0;
+            font-size: 10px;
+            color: #94a3b8;
+            text-align: center;
+        }
+
+        /* Print styles */
+        @media print {
+            body {
+                padding: 0;
+                font-size: 11px;
+            }
+
+            .section {
+                page-break-inside: avoid;
+            }
+
+            .header {
+                page-break-after: avoid;
+            }
+
+            table {
+                font-size: 10px;
+            }
+
+            tr:hover {
+                background: transparent;
+            }
+        }
+
+        @page {
+            margin: 0.5in;
+            size: letter;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="header">
+        <h1>Profitability Analysis Report</h1>
+        <div class="subtitle">ServiceTitan Analytics</div>
+        {{if or .FromDate .ToDate}}
+        <div class="date-range">
+            Period:
+            {{if .FromDate}}{{.FromDate.Format "January 2, 2006"}}{{else}}All Time{{end}}
+            —
+            {{if .ToDate}}{{.ToDate.Format "January 2, 2006"}}{{else}}Present{{end}}
+        </div>
+        {{end}}
+    </div>
+
+    <div class="executive-summary">
+        <h2>Executive Summary</h2>
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="label">Completed Jobs</div>
+                <div class="value">{{.TotalJobs}}</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">Total Revenue</div>
+                <div class="value">{{formatMoney .TotalRevenue}}</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">Total Profit</div>
+                <div class="value {{if isNegative .TotalProfit}}negative{{else}}positive{{end}}">
+                    {{formatMoney .TotalProfit}}
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="label">Average Margin</div>
+                <div class="value {{if lt .AvgMarginPct 15.0}}warning{{else}}positive{{end}}">
+                    {{printf "%.1f%%" .AvgMarginPct}}
+                </div>
+            </div>
+        </div>
+        {{if gt .JobsWithLoss 0}}
+        <div class="stats-grid" style="margin-top: 16px; padding-top: 16px; border-top: 1px solid #cbd5e1;">
+            <div class="stat-card">
+                <div class="label">Jobs with Losses</div>
+                <div class="value negative">{{.JobsWithLoss}}</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">Total Losses</div>
+                <div class="value negative">{{formatMoney (abs .TotalLoss)}}</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">Total Costs</div>
+                <div class="value">{{formatMoney .TotalCosts}}</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">Loss Rate</div>
+                <div class="value warning">
+                    {{if gt .TotalJobs 0}}{{printf "%.1f%%" (mul (div (float64 .JobsWithLoss) (float64 .TotalJobs))
+                    100)}}{{else}}0%{{end}}
+                </div>
+            </div>
+        </div>
+        {{end}}
+    </div>
+
+    <div class="section">
+        <h2>Profitability by Job Type</h2>
+        {{if .JobTypes}}
+        <table>
+            <thead>
+                <tr>
+                    <th>Job Type</th>
+                    <th class="right">Jobs</th>
+                    <th class="right">Avg Revenue</th>
+                    <th class="right">Avg Costs</th>
+                    <th class="right">Avg Profit</th>
+                    <th class="right">Margin</th>
+                    <th class="right">Total Profit</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .JobTypes}}
+                <tr>
+                    <td>{{truncate .JobType 35}}</td>
+                    <td class="right">{{.JobCount}}</td>
+                    <td class="right money">{{formatMoney .AvgRevenue}}</td>
+                    <td class="right money">{{formatMoney .AvgCosts}}</td>
+                    <td class="right money {{if isNegative .AvgProfit}}negative{{else}}positive{{end}}">
+                        {{formatMoney .AvgProfit}}
+                    </td>
+                    <td class="right percent">{{formatPercent .AvgMarginPct}}</td>
+                    <td class="right money {{if isNegative .TotalProfit}}negative{{else}}positive{{end}}">
+                        {{formatMoney .TotalProfit}}
+                    </td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+        {{else}}
+        <p class="no-issues">No job type data available</p>
+        {{end}}
+    </div>
+
+    <div class="section">
+        <h2>Profitability by Campaign</h2>
+        {{if .Campaigns}}
+        <table>
+            <thead>
+                <tr>
+                    <th>Campaign</th>
+                    <th>Category</th>
+                    <th class="right">Jobs</th>
+                    <th class="right">Avg Revenue</th>
+                    <th class="right">Avg Profit</th>
+                    <th class="right">Margin</th>
+                    <th class="right">Total Profit</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .Campaigns}}
+                <tr>
+                    <td>{{truncate .CampaignName 25}}</td>
+                    <td>{{truncate .CampaignCategory 20}}</td>
+                    <td class="right">{{.JobCount}}</td>
+                    <td class="right money">{{formatMoney .AvgRevenue}}</td>
+                    <td class="right money {{if isNegative .AvgProfit}}negative{{else}}positive{{end}}">
+                        {{formatMoney .AvgProfit}}
+                    </td>
+                    <td class="right percent">{{formatPercent .AvgMarginPct}}</td>
+                    <td class="right money {{if isNegative .TotalProfit}}negative{{else}}positive{{end}}">
+                        {{formatMoney .TotalProfit}}
+                    </td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+        {{else}}
+        <p class="no-issues">No campaign data available</p>
+        {{end}}
+    </div>
+
+    <div class="section">
+        <h2>Top 10 Customers by Profit</h2>
+        {{if .TopCustomers}}
+        <table>
+            <thead>
+                <tr>
+                    <th style="width: 5%">#</th>
+                    <th>Customer</th>
+                    <th>Type</th>
+                    <th class="right">Jobs</th>
+                    <th class="right">Avg Profit/Job</th>
+                    <th class="right">Margin</th>
+                    <th class="right">Total Profit</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range $i, $c := .TopCustomers}}
+                <tr>
+                    <td>{{add $i 1}}</td>
+                    <td>{{truncate $c.CustomerName 30}}</td>
+                    <td>{{$c.CustomerType}}</td>
+                    <td class="right">{{$c.JobCount}}</td>
+                    <td class="right money {{if isNegative $c.AvgProfit}}negative{{else}}positive{{end}}">
+                        {{formatMoney $c.AvgProfit}}
+                    </td>
+                    <td class="right percent">{{formatPercent $c.AvgMarginPct}}</td>
+                    <td class="right money {{if isNegative $c.TotalProfit}}negative{{else}}positive{{end}}">
+                        {{formatMoney $c.TotalProfit}}
+                    </td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+        {{else}}
+        <p class="no-issues">No customer data available</p>
+        {{end}}
+    </div>
+
+    {{if .RedFlagJobs}}
+    <div class="section red-flags">
+        <h2>🚩 Red Flags: Jobs with Negative Margins</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Job ID</th>
+                    <th>Customer</th>
+                    <th>Job Type</th>
+                    <th class="right">Revenue</th>
+                    <th class="right">Costs</th>
+                    <th class="right">Loss</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .RedFlagJobs}}
+                <tr>
+                    <td>{{.JobID}}</td>
+                    <td>{{truncate .CustomerName 20}}</td>
+                    <td>{{truncate .JobType 20}}</td>
+                    <td class="right money">{{formatMoney .Revenue}}</td>
+                    <td class="right money">{{formatMoney .Costs}}</td>
+                    <td class="right money negative">{{formatMoney .Loss}}</td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+    {{else}}
+    <div class="section">
+        <h2>Red Flags</h2>
+        <p class="no-issues">No jobs with negative margins found</p>
+    </div>
+    {{end}}
+
+    <div class="footer">
+        Generated on {{.GeneratedAt.Format "January 2, 2006 at 3:04 PM"}} • ServiceTitan Analytics
+    </div>
+</body>
+
+</html>
