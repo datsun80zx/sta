@@ -11,6 +11,7 @@ import (
 	"github.com/shopspring/decimal"
 
 	"github.com/datsun80zx/sta.git/internal/db"
+	"github.com/datsun80zx/sta.git/internal/metrics"
 	"github.com/datsun80zx/sta.git/internal/parser"
 )
 
@@ -30,15 +31,17 @@ func NewImporter(database *sql.DB) *Importer {
 
 // ImportResult contains the results of an import operation
 type ImportResult struct {
-	BatchID           int64
-	JobsImported      int
-	InvoicesImported  int
-	InvoicesSkipped   int
-	CustomersUpserted int
-	MetricsCalculated int
-	ValidationResult  *ValidationResult
-	Duration          time.Duration
-	AlreadyImported   bool
+	BatchID               int64
+	JobsImported          int
+	InvoicesImported      int
+	InvoicesSkipped       int
+	CustomersUpserted     int
+	TechniciansImported   int
+	JobMetricsCalculated  int
+	TechMetricsCalculated int
+	ValidationResult      *ValidationResult
+	Duration              time.Duration
+	AlreadyImported       bool
 }
 
 // ImportFiles imports both jobs and invoices CSV files
@@ -119,6 +122,17 @@ func (i *Importer) ImportFiles(ctx context.Context, jobsPath, invoicesPath strin
 		return nil, fmt.Errorf("failed to import jobs: %w", err)
 	}
 
+	// Step 7.5: Import technicians
+	techniciansImported, err := i.ImportTechnicians(ctx, tx, jobs, batch.ID)
+	if err != nil {
+		txQueries.UpdateImportBatchStatus(ctx, db.UpdateImportBatchStatusParams{
+			ID:           batch.ID,
+			Status:       "failed",
+			ErrorMessage: sql.NullString{String: err.Error(), Valid: true},
+		})
+		return nil, fmt.Errorf("failed to import technicians: %w", err)
+	}
+
 	// Step 8: Import invoices (skip those without matching jobs)
 	invoicesImported, invoicesSkipped, skippedJobIDs, err := i.importInvoices(ctx, tx, invoices, batch.ID, validJobIDs)
 	if err != nil {
@@ -148,15 +162,22 @@ func (i *Importer) ImportFiles(ctx context.Context, jobsPath, invoicesPath strin
 				invoicesSkipped, len(skippedJobIDs)))
 	}
 
-	// Step 10: Calculate job metrics
-	err = txQueries.CalculateJobMetrics(ctx, batch.ID)
+	// Step 10: Calculate job metrics (Go-side)
+	jobMetricsCalculated, err := i.calculateAndSaveJobMetrics(ctx, tx, jobs, invoices, validJobIDs)
 	if err != nil {
 		txQueries.UpdateImportBatchStatus(ctx, db.UpdateImportBatchStatusParams{
 			ID:           batch.ID,
 			Status:       "failed",
 			ErrorMessage: sql.NullString{String: err.Error(), Valid: true},
 		})
-		return nil, fmt.Errorf("failed to calculate metrics: %w", err)
+		return nil, fmt.Errorf("failed to calculate job metrics: %w", err)
+	}
+
+	// Step 10.5: Calculate technician metrics (Go-side)
+	techMetricsCalculated, err := i.calculateAndSaveTechnicianMetrics(ctx, tx, jobs, batch.ID)
+	if err != nil {
+		// Log warning but don't fail - technician metrics are supplementary
+		fmt.Printf("Warning: failed to calculate technician metrics: %v\n", err)
 	}
 
 	// Step 11: Mark batch as success
@@ -174,19 +195,157 @@ func (i *Importer) ImportFiles(ctx context.Context, jobsPath, invoicesPath strin
 		return nil, fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
-	metricsCount := len(jobs)
-
 	return &ImportResult{
-		BatchID:           batch.ID,
-		JobsImported:      len(jobs),
-		InvoicesImported:  invoicesImported,
-		InvoicesSkipped:   invoicesSkipped,
-		CustomersUpserted: customersUpserted,
-		MetricsCalculated: metricsCount,
-		ValidationResult:  validationResult,
-		Duration:          time.Since(startTime),
-		AlreadyImported:   false,
+		BatchID:               batch.ID,
+		JobsImported:          len(jobs),
+		InvoicesImported:      invoicesImported,
+		InvoicesSkipped:       invoicesSkipped,
+		CustomersUpserted:     customersUpserted,
+		TechniciansImported:   techniciansImported,
+		JobMetricsCalculated:  jobMetricsCalculated,
+		TechMetricsCalculated: techMetricsCalculated,
+		ValidationResult:      validationResult,
+		Duration:              time.Since(startTime),
+		AlreadyImported:       false,
 	}, nil
+}
+
+// calculateAndSaveJobMetrics calculates job metrics in Go and saves to DB
+func (i *Importer) calculateAndSaveJobMetrics(ctx context.Context, tx *sql.Tx, jobs []parser.JobRow, invoices []parser.InvoiceRow, validJobIDs map[string]bool) (int, error) {
+	// Convert parser types to metrics types
+	jobData := make([]metrics.JobData, 0, len(jobs))
+	for _, j := range jobs {
+		if !validJobIDs[j.JobID] {
+			continue
+		}
+		jobData = append(jobData, metrics.JobData{
+			ID:           j.JobID,
+			Status:       j.Status,
+			JobsSubtotal: decimalOrZero(j.JobsSubtotal),
+		})
+	}
+
+	invoiceData := make([]metrics.InvoiceData, 0, len(invoices))
+	for _, inv := range invoices {
+		if !validJobIDs[inv.JobID] {
+			continue
+		}
+		invoiceData = append(invoiceData, metrics.InvoiceData{
+			ID:           inv.InvoiceID,
+			JobID:        inv.JobID,
+			CostsTotal:   decimalOrZero(inv.CostsTotal),
+			IsAdjustment: inv.IsAdjustment,
+		})
+	}
+
+	// Calculate metrics in Go
+	jobMetrics := metrics.CalculateJobMetrics(jobData, invoiceData)
+
+	// Save to database
+	err := metrics.SaveJobMetrics(ctx, tx, jobMetrics)
+	if err != nil {
+		return 0, err
+	}
+
+	return len(jobMetrics), nil
+}
+
+// calculateAndSaveTechnicianMetrics calculates technician metrics in Go and saves to DB
+func (i *Importer) calculateAndSaveTechnicianMetrics(ctx context.Context, tx *sql.Tx, jobs []parser.JobRow, batchID int64) (int, error) {
+	// Get all technician IDs
+	rows, err := tx.QueryContext(ctx, "SELECT id FROM technicians")
+	if err != nil {
+		return 0, fmt.Errorf("failed to get technician IDs: %w", err)
+	}
+	defer rows.Close()
+
+	var techIDs []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return 0, err
+		}
+		techIDs = append(techIDs, id)
+	}
+
+	if len(techIDs) == 0 {
+		return 0, nil
+	}
+
+	// Get job_technicians for this batch
+	jtRows, err := tx.QueryContext(ctx, `
+		SELECT jt.job_id, jt.technician_id, jt.role
+		FROM job_technicians jt
+		JOIN jobs j ON jt.job_id = j.id
+		WHERE j.import_batch_id = $1
+	`, batchID)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get job_technicians: %w", err)
+	}
+	defer jtRows.Close()
+
+	var jobTechs []metrics.JobTechnicianData
+	for jtRows.Next() {
+		var jt metrics.JobTechnicianData
+		if err := jtRows.Scan(&jt.JobID, &jt.TechnicianID, &jt.Role); err != nil {
+			return 0, err
+		}
+		jobTechs = append(jobTechs, jt)
+	}
+
+	// Convert jobs to metrics format
+	jobsForMetrics := make([]metrics.JobForTechMetrics, 0, len(jobs))
+	for _, j := range jobs {
+		estimateCount := 0
+		if j.EstimateCount != nil {
+			estimateCount = int(*j.EstimateCount)
+		}
+		jobsForMetrics = append(jobsForMetrics, metrics.JobForTechMetrics{
+			ID:                    j.JobID,
+			Status:                j.Status,
+			JobsSubtotal:          decimalOrZero(j.JobsSubtotal),
+			EstimateSalesSubtotal: decimalOrZero(j.EstimateSalesSubtotal),
+			TotalHoursWorked:      decimalOrZero(j.TotalHoursWorked),
+			EstimateCount:         estimateCount,
+		})
+	}
+
+	// Get existing job metrics
+	jmRows, err := tx.QueryContext(ctx, `
+		SELECT job_id, revenue, total_costs, gross_profit, gross_margin_pct, invoice_count, has_adjustment
+		FROM job_metrics
+	`)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get job_metrics: %w", err)
+	}
+	defer jmRows.Close()
+
+	var jobMetrics []metrics.JobMetric
+	for jmRows.Next() {
+		var jm metrics.JobMetric
+		var marginPct sql.NullFloat64
+		if err := jmRows.Scan(&jm.JobID, &jm.Revenue, &jm.TotalCosts, &jm.GrossProfit, &marginPct, &jm.InvoiceCount, &jm.HasAdjustment); err != nil {
+			return 0, err
+		}
+		if marginPct.Valid {
+			jm.GrossMarginPct = decimal.NullDecimal{
+				Decimal: decimal.NewFromFloat(marginPct.Float64),
+				Valid:   true,
+			}
+		}
+		jobMetrics = append(jobMetrics, jm)
+	}
+
+	// Calculate metrics in Go
+	techMetrics := metrics.CalculateTechnicianMetrics(techIDs, jobTechs, jobsForMetrics, jobMetrics)
+
+	// Save to database
+	err = metrics.SaveTechnicianMetrics(ctx, tx, techMetrics)
+	if err != nil {
+		return 0, err
+	}
+
+	return len(techMetrics), nil
 }
 
 // parseFiles parses both CSV files
@@ -287,27 +446,32 @@ func (i *Importer) importJobs(ctx context.Context, tx *sql.Tx, jobs []parser.Job
 
 	for idx, job := range jobs {
 		params := db.CreateJobParams{
-			ID:                 job.JobID,
-			CustomerID:         job.CustomerID,
-			ImportBatchID:      batchID,
-			JobType:            job.JobType,
-			BusinessUnit:       sqlNullString(job.BusinessUnit),
-			Status:             job.Status,
-			JobCreationDate:    sqlNullTime(job.JobCreationDate),
-			JobScheduleDate:    sqlNullTime(job.JobScheduleDate),
-			JobCompletionDate:  sqlNullTime(job.JobCompletionDate),
-			AssignedTechnician: sqlNullString(job.AssignedTechnicians),
-			SoldByTechnician:   sqlNullString(job.SoldBy),
-			BookedBy:           sqlNullString(job.BookedBy),
-			CampaignName:       sqlNullString(stringFromInt64Ptr(job.JobCampaignID)),
-			CampaignCategory:   sqlNullString(job.CampaignCategory),
-			CallCampaign:       sqlNullString(stringFromInt64Ptr(job.CallCampaignID)),
-			JobsSubtotal:       decimalOrZero(job.JobsSubtotal),
-			JobTotal:           decimalOrZero(job.JobTotal),
-			InvoiceID:          sqlNullString(job.InvoiceID),
-			TotalHoursWorked:   decimalOrZero(job.TotalHoursWorked),
-			Priority:           sqlNullString(job.Priority),
-			SurveyScore:        sqlNullInt32FromDecimal(job.SurveyResult),
+			ID:                    job.JobID,
+			CustomerID:            job.CustomerID,
+			ImportBatchID:         batchID,
+			JobType:               job.JobType,
+			BusinessUnit:          sqlNullString(job.BusinessUnit),
+			Status:                job.Status,
+			JobCreationDate:       sqlNullTime(job.JobCreationDate),
+			JobScheduleDate:       sqlNullTime(job.JobScheduleDate),
+			JobCompletionDate:     sqlNullTime(job.JobCompletionDate),
+			AssignedTechnician:    sqlNullString(job.AssignedTechnicians),
+			SoldByTechnician:      sqlNullString(job.SoldBy),
+			BookedBy:              sqlNullString(job.BookedBy),
+			CampaignName:          sqlNullString(stringFromInt64Ptr(job.JobCampaignID)),
+			CampaignCategory:      sqlNullString(job.CampaignCategory),
+			CallCampaign:          sqlNullString(stringFromInt64Ptr(job.CallCampaignID)),
+			JobsSubtotal:          decimalOrZero(job.JobsSubtotal),
+			JobTotal:              decimalOrZero(job.JobTotal),
+			EstimateSalesSubtotal: decimalOrZero(job.EstimateSalesSubtotal),
+			InvoiceID:             sqlNullString(job.InvoiceID),
+			TotalHoursWorked:      decimalOrZero(job.TotalHoursWorked),
+			Priority:              sqlNullString(job.Priority),
+			SurveyScore:           sqlNullInt32FromDecimal(job.SurveyResult),
+			EstimateCount:         sqlNullInt32FromInt64Ptr(job.EstimateCount),
+			IsOpportunity:         job.Opportunity,
+			IsConverted:           job.Converted,
+			PrimaryTechnician:     sqlNullString(job.PrimaryTechnician),
 		}
 
 		_, err := txQueries.CreateJob(ctx, params)
@@ -418,4 +582,11 @@ func stringFromInt64Ptr(i *int64) *string {
 	}
 	s := fmt.Sprintf("%d", *i)
 	return &s
+}
+
+func sqlNullInt32FromInt64Ptr(i *int64) sql.NullInt32 {
+	if i == nil {
+		return sql.NullInt32{Valid: false}
+	}
+	return sql.NullInt32{Int32: int32(*i), Valid: true}
 }

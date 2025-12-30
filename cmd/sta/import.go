@@ -38,7 +38,7 @@ func runImport(ctx context.Context, db *sql.DB, jobsPath, invoicesPath string) {
 		fmt.Printf("Invoices skipped:   %d (no matching job)\n", result.InvoicesSkipped)
 	}
 	fmt.Printf("Customers upserted: %d\n", result.CustomersUpserted)
-	fmt.Printf("Metrics calculated: %d\n", result.MetricsCalculated)
+	// fmt.Printf("Metrics calculated: %d\n", result.MetricsCalculated)
 	fmt.Printf("Duration:           %v\n", result.Duration.Round(time.Millisecond))
 
 	if result.ValidationResult != nil && len(result.ValidationResult.Warnings) > 0 {

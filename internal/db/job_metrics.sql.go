@@ -9,83 +9,8 @@ import (
 	"context"
 )
 
-const calculateJobMetrics = `-- name: CalculateJobMetrics :exec
-INSERT INTO job_metrics (job_id, revenue, total_costs, gross_profit, gross_margin_pct, invoice_count, has_adjustment)
-SELECT 
-    j.id as job_id,
-    j.jobs_subtotal as revenue,
-    CASE 
-        WHEN EXISTS (SELECT 1 FROM invoices WHERE job_id = j.id AND is_adjustment = true) 
-        THEN (
-            SELECT costs_total 
-            FROM invoices 
-            WHERE job_id = j.id AND is_adjustment = true 
-            ORDER BY invoice_date DESC 
-            LIMIT 1
-        )
-        ELSE COALESCE((
-            SELECT SUM(costs_total) 
-            FROM invoices 
-            WHERE job_id = j.id AND is_adjustment = false
-        ), 0)
-    END as total_costs,
-    j.jobs_subtotal - CASE 
-        WHEN EXISTS (SELECT 1 FROM invoices WHERE job_id = j.id AND is_adjustment = true) 
-        THEN (
-            SELECT costs_total 
-            FROM invoices 
-            WHERE job_id = j.id AND is_adjustment = true 
-            ORDER BY invoice_date DESC 
-            LIMIT 1
-        )
-        ELSE COALESCE((
-            SELECT SUM(costs_total) 
-            FROM invoices 
-            WHERE job_id = j.id AND is_adjustment = false
-        ), 0)
-    END as gross_profit,
-    CASE 
-        WHEN j.jobs_subtotal > 0 THEN
-            ((j.jobs_subtotal - CASE 
-                WHEN EXISTS (SELECT 1 FROM invoices WHERE job_id = j.id AND is_adjustment = true) 
-                THEN (
-                    SELECT costs_total 
-                    FROM invoices 
-                    WHERE job_id = j.id AND is_adjustment = true 
-                    ORDER BY invoice_date DESC 
-                    LIMIT 1
-                )
-                ELSE COALESCE((
-                    SELECT SUM(costs_total) 
-                    FROM invoices 
-                    WHERE job_id = j.id AND is_adjustment = false
-                ), 0)
-            END) / j.jobs_subtotal) * 100
-        ELSE NULL
-    END as gross_margin_pct,
-    (SELECT COUNT(*) FROM invoices WHERE job_id = j.id) as invoice_count,
-    EXISTS (SELECT 1 FROM invoices WHERE job_id = j.id AND is_adjustment = true) as has_adjustment
-FROM jobs j
-WHERE j.import_batch_id = $1
-  AND j.status = 'Completed'
-  AND j.jobs_subtotal IS NOT NULL
-  AND EXISTS (SELECT 1 FROM invoices WHERE job_id = j.id)
-ON CONFLICT (job_id) DO UPDATE SET
-    revenue = EXCLUDED.revenue,
-    total_costs = EXCLUDED.total_costs,
-    gross_profit = EXCLUDED.gross_profit,
-    gross_margin_pct = EXCLUDED.gross_margin_pct,
-    invoice_count = EXCLUDED.invoice_count,
-    has_adjustment = EXCLUDED.has_adjustment,
-    calculated_at = NOW()
-`
-
-func (q *Queries) CalculateJobMetrics(ctx context.Context, importBatchID int64) error {
-	_, err := q.db.ExecContext(ctx, calculateJobMetrics, importBatchID)
-	return err
-}
-
 const getProfitByJobType = `-- name: GetProfitByJobType :many
+
 SELECT 
     j.job_type,
     COUNT(*) as job_count,
@@ -111,6 +36,7 @@ type GetProfitByJobTypeRow struct {
 	TotalProfit    string `json:"total_profit"`
 }
 
+// Simplified job_metrics.sql - calculations done in Go
 func (q *Queries) GetProfitByJobType(ctx context.Context) ([]GetProfitByJobTypeRow, error) {
 	rows, err := q.db.QueryContext(ctx, getProfitByJobType)
 	if err != nil {

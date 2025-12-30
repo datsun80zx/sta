@@ -129,7 +129,6 @@ func (p *CSVParser) parseJobRow(record []string, colMap map[string]int, rowNum i
 			return job, err
 		}
 	} else {
-		// Jobs Subtotal can be empty for some jobs (like zero dollar jobs)
 		job.JobsSubtotal = nil
 	}
 
@@ -142,6 +141,9 @@ func (p *CSVParser) parseJobRow(record []string, colMap map[string]int, rowNum i
 	} else {
 		job.JobTotal = nil
 	}
+
+	// Estimate Sales Subtotal - what was sold via estimates
+	job.EstimateSalesSubtotal = parseNullableDecimal(getField(record, colMap, "jobs estimate sales subtotal"))
 
 	// Customer info
 	job.CustomerName = parseNullableString(getField(record, colMap, "customer name"))
@@ -187,6 +189,7 @@ func (p *CSVParser) parseJobRow(record []string, colMap map[string]int, rowNum i
 	job.SurveyResult = parseNullableDecimal(getField(record, colMap, "survey result"))
 	job.MemberStatus = parseNullableString(getField(record, colMap, "member status"))
 	job.Tags = parseNullableString(getField(record, colMap, "tags"))
+	job.EstimateCount = parseNullableInt64(getField(record, colMap, "estimates"))
 
 	// Boolean fields
 	job.Opportunity = parseBool(getField(record, colMap, "opportunity"))

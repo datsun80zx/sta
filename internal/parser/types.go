@@ -12,7 +12,7 @@ type JobRow struct {
 	JobID      string
 	CustomerID int64
 	LocationID *int64
-	InvoiceID  *string // Changed from *int64 to *string
+	InvoiceID  *string
 
 	// Customer info
 	CustomerName  *string
@@ -50,8 +50,9 @@ type JobRow struct {
 	CampaignCategory *string
 
 	// Revenue
-	JobsSubtotal *decimal.Decimal
-	JobTotal     *decimal.Decimal
+	JobsSubtotal          *decimal.Decimal
+	JobTotal              *decimal.Decimal
+	EstimateSalesSubtotal *decimal.Decimal // What was sold via estimates
 
 	// Other
 	Summary          *string
@@ -60,6 +61,7 @@ type JobRow struct {
 	SurveyResult     *decimal.Decimal
 	MemberStatus     *string
 	Tags             *string
+	EstimateCount    *int64
 
 	// Boolean flags
 	Opportunity   bool
@@ -72,7 +74,7 @@ type JobRow struct {
 // InvoiceRow represents a parsed row from the Invoices report
 type InvoiceRow struct {
 	// Core identifiers
-	InvoiceID             string // Changed from int64 to string
+	InvoiceID             string
 	JobID                 string
 	CustomerID            *int64
 	LocationID            *int64

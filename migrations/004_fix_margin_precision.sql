@@ -14,6 +14,6 @@ ALTER TABLE job_metrics
 -- +goose StatementBegin
 
 ALTER TABLE job_metrics 
-    ALTER COLUMN gross_margin_pct TYPE NUMERIC(8, 2);
+    ALTER COLUMN gross_margin_pct TYPE NUMERIC;
 
 -- +goose StatementEnd

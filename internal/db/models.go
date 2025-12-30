@@ -72,28 +72,33 @@ type Invoice struct {
 }
 
 type Job struct {
-	ID                 string          `json:"id"`
-	CustomerID         int64           `json:"customer_id"`
-	ImportBatchID      int64           `json:"import_batch_id"`
-	JobType            string          `json:"job_type"`
-	BusinessUnit       sql.NullString  `json:"business_unit"`
-	Status             string          `json:"status"`
-	JobCreationDate    sql.NullTime    `json:"job_creation_date"`
-	JobScheduleDate    sql.NullTime    `json:"job_schedule_date"`
-	JobCompletionDate  sql.NullTime    `json:"job_completion_date"`
-	AssignedTechnician sql.NullString  `json:"assigned_technician"`
-	SoldByTechnician   sql.NullString  `json:"sold_by_technician"`
-	BookedBy           sql.NullString  `json:"booked_by"`
-	CampaignName       sql.NullString  `json:"campaign_name"`
-	CampaignCategory   sql.NullString  `json:"campaign_category"`
-	CallCampaign       sql.NullString  `json:"call_campaign"`
-	JobsSubtotal       decimal.Decimal `json:"jobs_subtotal"`
-	JobTotal           decimal.Decimal `json:"job_total"`
-	InvoiceID          sql.NullString  `json:"invoice_id"`
-	TotalHoursWorked   decimal.Decimal `json:"total_hours_worked"`
-	Priority           sql.NullString  `json:"priority"`
-	SurveyScore        sql.NullInt32   `json:"survey_score"`
-	CreatedAt          time.Time       `json:"created_at"`
+	ID                    string          `json:"id"`
+	CustomerID            int64           `json:"customer_id"`
+	ImportBatchID         int64           `json:"import_batch_id"`
+	JobType               string          `json:"job_type"`
+	BusinessUnit          sql.NullString  `json:"business_unit"`
+	Status                string          `json:"status"`
+	JobCreationDate       sql.NullTime    `json:"job_creation_date"`
+	JobScheduleDate       sql.NullTime    `json:"job_schedule_date"`
+	JobCompletionDate     sql.NullTime    `json:"job_completion_date"`
+	AssignedTechnician    sql.NullString  `json:"assigned_technician"`
+	SoldByTechnician      sql.NullString  `json:"sold_by_technician"`
+	BookedBy              sql.NullString  `json:"booked_by"`
+	CampaignName          sql.NullString  `json:"campaign_name"`
+	CampaignCategory      sql.NullString  `json:"campaign_category"`
+	CallCampaign          sql.NullString  `json:"call_campaign"`
+	JobsSubtotal          decimal.Decimal `json:"jobs_subtotal"`
+	JobTotal              decimal.Decimal `json:"job_total"`
+	InvoiceID             sql.NullString  `json:"invoice_id"`
+	TotalHoursWorked      decimal.Decimal `json:"total_hours_worked"`
+	Priority              sql.NullString  `json:"priority"`
+	SurveyScore           sql.NullInt32   `json:"survey_score"`
+	CreatedAt             time.Time       `json:"created_at"`
+	EstimateCount         sql.NullInt32   `json:"estimate_count"`
+	IsOpportunity         bool            `json:"is_opportunity"`
+	IsConverted           bool            `json:"is_converted"`
+	PrimaryTechnician     sql.NullString  `json:"primary_technician"`
+	EstimateSalesSubtotal decimal.Decimal `json:"estimate_sales_subtotal"`
 }
 
 type JobMetric struct {
@@ -105,4 +110,41 @@ type JobMetric struct {
 	InvoiceCount   int32           `json:"invoice_count"`
 	HasAdjustment  bool            `json:"has_adjustment"`
 	CalculatedAt   time.Time       `json:"calculated_at"`
+}
+
+type JobTechnician struct {
+	ID           int64     `json:"id"`
+	JobID        string    `json:"job_id"`
+	TechnicianID int64     `json:"technician_id"`
+	Role         string    `json:"role"`
+	CreatedAt    time.Time `json:"created_at"`
+}
+
+type Technician struct {
+	ID            int64        `json:"id"`
+	Name          string       `json:"name"`
+	FirstSeenDate sql.NullTime `json:"first_seen_date"`
+	LastSeenDate  sql.NullTime `json:"last_seen_date"`
+	CreatedAt     time.Time    `json:"created_at"`
+	UpdatedAt     time.Time    `json:"updated_at"`
+}
+
+type TechnicianMetric struct {
+	TechnicianID       int64           `json:"technician_id"`
+	JobsSold           int32           `json:"jobs_sold"`
+	TotalSales         string          `json:"total_sales"`
+	AvgSale            decimal.Decimal `json:"avg_sale"`
+	Opportunities      int32           `json:"opportunities"`
+	Conversions        int32           `json:"conversions"`
+	ConversionRate     decimal.Decimal `json:"conversion_rate"`
+	JobsServiced       int32           `json:"jobs_serviced"`
+	TotalHoursWorked   string          `json:"total_hours_worked"`
+	AvgHoursPerJob     decimal.Decimal `json:"avg_hours_per_job"`
+	TotalEstimates     int32           `json:"total_estimates"`
+	JobsWithEstimates  int32           `json:"jobs_with_estimates"`
+	AvgEstimatesPerJob decimal.Decimal `json:"avg_estimates_per_job"`
+	TotalGrossProfit   decimal.Decimal `json:"total_gross_profit"`
+	AvgGrossProfit     decimal.Decimal `json:"avg_gross_profit"`
+	AvgMarginPct       decimal.Decimal `json:"avg_margin_pct"`
+	CalculatedAt       time.Time       `json:"calculated_at"`
 }

@@ -19,36 +19,42 @@ INSERT INTO jobs (
     job_creation_date, job_schedule_date, job_completion_date,
     assigned_technician, sold_by_technician, booked_by,
     campaign_name, campaign_category, call_campaign,
-    jobs_subtotal, job_total,
-    invoice_id, total_hours_worked, priority, survey_score
+    jobs_subtotal, job_total, estimate_sales_subtotal,
+    invoice_id, total_hours_worked, priority, survey_score,
+    estimate_count, is_opportunity, is_converted, primary_technician
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26
 )
-RETURNING id, customer_id, import_batch_id, job_type, business_unit, status, job_creation_date, job_schedule_date, job_completion_date, assigned_technician, sold_by_technician, booked_by, campaign_name, campaign_category, call_campaign, jobs_subtotal, job_total, invoice_id, total_hours_worked, priority, survey_score, created_at
+RETURNING id, customer_id, import_batch_id, job_type, business_unit, status, job_creation_date, job_schedule_date, job_completion_date, assigned_technician, sold_by_technician, booked_by, campaign_name, campaign_category, call_campaign, jobs_subtotal, job_total, invoice_id, total_hours_worked, priority, survey_score, created_at, estimate_count, is_opportunity, is_converted, primary_technician, estimate_sales_subtotal
 `
 
 type CreateJobParams struct {
-	ID                 string          `json:"id"`
-	CustomerID         int64           `json:"customer_id"`
-	ImportBatchID      int64           `json:"import_batch_id"`
-	JobType            string          `json:"job_type"`
-	BusinessUnit       sql.NullString  `json:"business_unit"`
-	Status             string          `json:"status"`
-	JobCreationDate    sql.NullTime    `json:"job_creation_date"`
-	JobScheduleDate    sql.NullTime    `json:"job_schedule_date"`
-	JobCompletionDate  sql.NullTime    `json:"job_completion_date"`
-	AssignedTechnician sql.NullString  `json:"assigned_technician"`
-	SoldByTechnician   sql.NullString  `json:"sold_by_technician"`
-	BookedBy           sql.NullString  `json:"booked_by"`
-	CampaignName       sql.NullString  `json:"campaign_name"`
-	CampaignCategory   sql.NullString  `json:"campaign_category"`
-	CallCampaign       sql.NullString  `json:"call_campaign"`
-	JobsSubtotal       decimal.Decimal `json:"jobs_subtotal"`
-	JobTotal           decimal.Decimal `json:"job_total"`
-	InvoiceID          sql.NullString  `json:"invoice_id"`
-	TotalHoursWorked   decimal.Decimal `json:"total_hours_worked"`
-	Priority           sql.NullString  `json:"priority"`
-	SurveyScore        sql.NullInt32   `json:"survey_score"`
+	ID                    string          `json:"id"`
+	CustomerID            int64           `json:"customer_id"`
+	ImportBatchID         int64           `json:"import_batch_id"`
+	JobType               string          `json:"job_type"`
+	BusinessUnit          sql.NullString  `json:"business_unit"`
+	Status                string          `json:"status"`
+	JobCreationDate       sql.NullTime    `json:"job_creation_date"`
+	JobScheduleDate       sql.NullTime    `json:"job_schedule_date"`
+	JobCompletionDate     sql.NullTime    `json:"job_completion_date"`
+	AssignedTechnician    sql.NullString  `json:"assigned_technician"`
+	SoldByTechnician      sql.NullString  `json:"sold_by_technician"`
+	BookedBy              sql.NullString  `json:"booked_by"`
+	CampaignName          sql.NullString  `json:"campaign_name"`
+	CampaignCategory      sql.NullString  `json:"campaign_category"`
+	CallCampaign          sql.NullString  `json:"call_campaign"`
+	JobsSubtotal          decimal.Decimal `json:"jobs_subtotal"`
+	JobTotal              decimal.Decimal `json:"job_total"`
+	EstimateSalesSubtotal decimal.Decimal `json:"estimate_sales_subtotal"`
+	InvoiceID             sql.NullString  `json:"invoice_id"`
+	TotalHoursWorked      decimal.Decimal `json:"total_hours_worked"`
+	Priority              sql.NullString  `json:"priority"`
+	SurveyScore           sql.NullInt32   `json:"survey_score"`
+	EstimateCount         sql.NullInt32   `json:"estimate_count"`
+	IsOpportunity         bool            `json:"is_opportunity"`
+	IsConverted           bool            `json:"is_converted"`
+	PrimaryTechnician     sql.NullString  `json:"primary_technician"`
 }
 
 func (q *Queries) CreateJob(ctx context.Context, arg CreateJobParams) (Job, error) {
@@ -70,10 +76,15 @@ func (q *Queries) CreateJob(ctx context.Context, arg CreateJobParams) (Job, erro
 		arg.CallCampaign,
 		arg.JobsSubtotal,
 		arg.JobTotal,
+		arg.EstimateSalesSubtotal,
 		arg.InvoiceID,
 		arg.TotalHoursWorked,
 		arg.Priority,
 		arg.SurveyScore,
+		arg.EstimateCount,
+		arg.IsOpportunity,
+		arg.IsConverted,
+		arg.PrimaryTechnician,
 	)
 	var i Job
 	err := row.Scan(
@@ -99,8 +110,61 @@ func (q *Queries) CreateJob(ctx context.Context, arg CreateJobParams) (Job, erro
 		&i.Priority,
 		&i.SurveyScore,
 		&i.CreatedAt,
+		&i.EstimateCount,
+		&i.IsOpportunity,
+		&i.IsConverted,
+		&i.PrimaryTechnician,
+		&i.EstimateSalesSubtotal,
 	)
 	return i, err
+}
+
+const getJobsForTechnicianProcessing = `-- name: GetJobsForTechnicianProcessing :many
+SELECT 
+    id, 
+    assigned_technician, 
+    sold_by_technician, 
+    primary_technician,
+    job_completion_date
+FROM jobs
+WHERE import_batch_id = $1
+`
+
+type GetJobsForTechnicianProcessingRow struct {
+	ID                 string         `json:"id"`
+	AssignedTechnician sql.NullString `json:"assigned_technician"`
+	SoldByTechnician   sql.NullString `json:"sold_by_technician"`
+	PrimaryTechnician  sql.NullString `json:"primary_technician"`
+	JobCompletionDate  sql.NullTime   `json:"job_completion_date"`
+}
+
+func (q *Queries) GetJobsForTechnicianProcessing(ctx context.Context, importBatchID int64) ([]GetJobsForTechnicianProcessingRow, error) {
+	rows, err := q.db.QueryContext(ctx, getJobsForTechnicianProcessing, importBatchID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetJobsForTechnicianProcessingRow{}
+	for rows.Next() {
+		var i GetJobsForTechnicianProcessingRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.AssignedTechnician,
+			&i.SoldByTechnician,
+			&i.PrimaryTechnician,
+			&i.JobCompletionDate,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getJobsWithoutInvoices = `-- name: GetJobsWithoutInvoices :many

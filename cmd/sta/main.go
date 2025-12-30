@@ -24,6 +24,8 @@ Usage:
                                             Show top customers by profit
   sta report red-flags <type> [options]     Identify profitability problems
                                             Types: jobs, job-types, customers, high-revenue
+  sta report technicians [type]             Technician performance reports
+                                            Types: overview, sales, conversion, efficiency	
 
 Date Filtering:
   --from YYYY-MM-DD    Include jobs completed on or after this date
@@ -145,6 +147,8 @@ func handleReport(ctx context.Context, db *sql.DB, args []string) {
 		reportCustomers(ctx, db, reportArgs)
 	case "red-flags":
 		handleRedFlags(ctx, db, reportArgs)
+	case "technicians":
+		reportTechnicians(ctx, db, reportArgs)
 	default:
 		fmt.Printf("Unknown report type: %s\n", reportType)
 		fmt.Println("Available reports: summary, job-types, campaigns, customers, red-flags")
