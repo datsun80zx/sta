@@ -35,7 +35,9 @@ func NewRenderer() (*Renderer, error) {
 			return a / b
 		},
 		"float64": func(i int) float64 { return float64(i) },
-		"lt":      func(a, b float64) bool { return a < b },
+		"lt":      lessThan,
+		"gt":      greaterThan,
+		"eq":      equals,
 	}
 
 	tmpl, err := template.New("").Funcs(funcMap).ParseFS(templateFS, "templates/*.html")
@@ -49,6 +51,50 @@ func NewRenderer() (*Renderer, error) {
 // RenderSummary renders the summary report to HTML
 func (r *Renderer) RenderSummary(w io.Writer, report *SummaryReport) error {
 	return r.templates.ExecuteTemplate(w, "summary.html", report)
+}
+
+// RenderTechnicianReport renders the technician report to HTML
+func (r *Renderer) RenderTechnicianReport(w io.Writer, report *TechnicianReport) error {
+	return r.templates.ExecuteTemplate(w, "technicians.html", report)
+}
+
+// lessThan compares two values, handling both int and float64
+func lessThan(a, b interface{}) bool {
+	af := toFloat64(a)
+	bf := toFloat64(b)
+	return af < bf
+}
+
+// greaterThan compares two values, handling both int and float64
+func greaterThan(a, b interface{}) bool {
+	af := toFloat64(a)
+	bf := toFloat64(b)
+	return af > bf
+}
+
+// equals compares two values for equality
+func equals(a, b interface{}) bool {
+	af := toFloat64(a)
+	bf := toFloat64(b)
+	return af == bf
+}
+
+// toFloat64 converts int or float64 to float64
+func toFloat64(v interface{}) float64 {
+	switch n := v.(type) {
+	case int:
+		return float64(n)
+	case int32:
+		return float64(n)
+	case int64:
+		return float64(n)
+	case float32:
+		return float64(n)
+	case float64:
+		return n
+	default:
+		return 0
+	}
 }
 
 // formatMoney formats a float as currency

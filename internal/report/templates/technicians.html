@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Technician Performance Report</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            font-size: 12px;
+            line-height: 1.4;
+            color: #1a1a1a;
+            background: #fff;
+            padding: 0.5in;
+        }
+
+        /* Header */
+        .header {
+            border-bottom: 3px solid #059669;
+            padding-bottom: 16px;
+            margin-bottom: 24px;
+        }
+
+        .header h1 {
+            font-size: 24px;
+            font-weight: 700;
+            color: #065f46;
+            margin-bottom: 4px;
+        }
+
+        .header .subtitle {
+            font-size: 14px;
+            color: #64748b;
+        }
+
+        .header .date-range {
+            font-size: 13px;
+            color: #475569;
+            margin-top: 8px;
+        }
+
+        /* Executive Summary */
+        .executive-summary {
+            background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+            border: 1px solid #a7f3d0;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 24px;
+        }
+
+        .executive-summary h2 {
+            font-size: 16px;
+            color: #065f46;
+            margin-bottom: 16px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #6ee7b7;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+        }
+
+        .stat-card {
+            text-align: center;
+            background: white;
+            padding: 12px;
+            border-radius: 6px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+        }
+
+        .stat-card .label {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #64748b;
+            margin-bottom: 4px;
+        }
+
+        .stat-card .value {
+            font-size: 20px;
+            font-weight: 700;
+            color: #065f46;
+        }
+
+        /* Section styling */
+        .section {
+            margin-bottom: 24px;
+            page-break-inside: avoid;
+        }
+
+        .section h2 {
+            font-size: 16px;
+            color: #065f46;
+            margin-bottom: 12px;
+            padding-bottom: 6px;
+            border-bottom: 2px solid #d1fae5;
+        }
+
+        .section h3 {
+            font-size: 14px;
+            color: #047857;
+            margin: 16px 0 8px 0;
+        }
+
+        /* Tables */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 11px;
+        }
+
+        thead {
+            background: #ecfdf5;
+        }
+
+        th {
+            text-align: left;
+            padding: 10px 8px;
+            font-weight: 600;
+            color: #065f46;
+            border-bottom: 2px solid #a7f3d0;
+            text-transform: uppercase;
+            font-size: 10px;
+            letter-spacing: 0.3px;
+        }
+
+        th.right,
+        td.right {
+            text-align: right;
+        }
+
+        th.center,
+        td.center {
+            text-align: center;
+        }
+
+        td {
+            padding: 8px;
+            border-bottom: 1px solid #f1f5f9;
+            color: #334155;
+        }
+
+        tr:hover {
+            background: #f0fdf4;
+        }
+
+        .money {
+            font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Mono', monospace;
+            font-size: 11px;
+        }
+
+        .percent {
+            font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Mono', monospace;
+        }
+
+        /* Rank badges */
+        .rank {
+            display: inline-block;
+            width: 24px;
+            height: 24px;
+            line-height: 24px;
+            text-align: center;
+            border-radius: 50%;
+            font-weight: 700;
+            font-size: 11px;
+        }
+
+        .rank-1 { background: #fef3c7; color: #92400e; }
+        .rank-2 { background: #e5e7eb; color: #374151; }
+        .rank-3 { background: #fed7aa; color: #9a3412; }
+        .rank-other { background: #f1f5f9; color: #64748b; }
+
+        /* Performance bars */
+        .perf-bar-container {
+            width: 100%;
+            height: 8px;
+            background: #e2e8f0;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .perf-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #10b981, #059669);
+            border-radius: 4px;
+        }
+
+        /* Trend indicators */
+        .trend-up { color: #059669; }
+        .trend-down { color: #dc2626; }
+        .trend-flat { color: #64748b; }
+
+        /* Monthly Trends */
+        .trends-table td {
+            vertical-align: middle;
+        }
+
+        .top-performer {
+            font-size: 10px;
+            color: #64748b;
+        }
+
+        .top-performer strong {
+            color: #065f46;
+        }
+
+        /* Individual technician cards */
+        .tech-card {
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 16px;
+            page-break-inside: avoid;
+        }
+
+        .tech-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .tech-card-header h3 {
+            margin: 0;
+            color: #065f46;
+        }
+
+        .tech-card-stats {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+
+        .tech-stat {
+            text-align: center;
+        }
+
+        .tech-stat .label {
+            font-size: 10px;
+            color: #64748b;
+            text-transform: uppercase;
+        }
+
+        .tech-stat .value {
+            font-size: 16px;
+            font-weight: 600;
+            color: #1e293b;
+        }
+
+        /* Footer */
+        .footer {
+            margin-top: 32px;
+            padding-top: 16px;
+            border-top: 1px solid #e2e8f0;
+            font-size: 10px;
+            color: #94a3b8;
+            text-align: center;
+        }
+
+        /* Print styles */
+        @media print {
+            body {
+                padding: 0;
+                font-size: 11px;
+            }
+
+            .section {
+                page-break-inside: avoid;
+            }
+
+            .tech-card {
+                page-break-inside: avoid;
+            }
+
+            .header {
+                page-break-after: avoid;
+            }
+
+            table {
+                font-size: 10px;
+            }
+
+            tr:hover {
+                background: transparent;
+            }
+        }
+
+        @page {
+            margin: 0.5in;
+            size: letter;
+        }
+
+        .no-data {
+            text-align: center;
+            padding: 20px;
+            color: #64748b;
+            font-style: italic;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="header">
+        <h1>Technician Performance Report</h1>
+        <div class="subtitle">ServiceTitan Analytics</div>
+        {{if or .FromDate .ToDate}}
+        <div class="date-range">
+            Period:
+            {{if .FromDate}}{{.FromDate.Format "January 2, 2006"}}{{else}}All Time{{end}}
+            —
+            {{if .ToDate}}{{.ToDate.Format "January 2, 2006"}}{{else}}Present{{end}}
+        </div>
+        {{end}}
+    </div>
+
+    <div class="executive-summary">
+        <h2>Executive Summary</h2>
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="label">Active Technicians</div>
+                <div class="value">{{.TotalTechnicians}}</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">Total Jobs Completed</div>
+                <div class="value">{{.TotalJobsCompleted}}</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">Total Sales</div>
+                <div class="value">{{formatMoney .TotalSales}}</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">Avg Conversion Rate</div>
+                <div class="value">{{printf "%.1f%%" .AvgConversionRate}}</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>Technician Rankings</h2>
+        {{if .Technicians}}
+        <table>
+            <thead>
+                <tr>
+                    <th style="width: 5%">#</th>
+                    <th>Technician</th>
+                    <th class="right">Jobs</th>
+                    <th class="right">Sold</th>
+                    <th class="right">Conv %</th>
+                    <th class="right">Total Sales</th>
+                    <th class="right">Avg Sale</th>
+                    <th class="right">Avg Hrs/Job</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range $i, $t := .Technicians}}
+                <tr>
+                    <td class="center">
+                        {{if eq $i 0}}<span class="rank rank-1">1</span>
+                        {{else if eq $i 1}}<span class="rank rank-2">2</span>
+                        {{else if eq $i 2}}<span class="rank rank-3">3</span>
+                        {{else}}<span class="rank rank-other">{{add $i 1}}</span>{{end}}
+                    </td>
+                    <td><strong>{{$t.Name}}</strong></td>
+                    <td class="right">{{$t.TotalJobs}}</td>
+                    <td class="right">{{$t.SoldJobs}}</td>
+                    <td class="right percent">{{printf "%.1f%%" $t.ConversionRate}}</td>
+                    <td class="right money">{{formatMoney $t.TotalSales}}</td>
+                    <td class="right money">{{if gt $t.SoldJobs 0}}{{formatMoney $t.AvgSale}}{{else}}—{{end}}</td>
+                    <td class="right">{{if gt $t.TotalJobs 0}}{{printf "%.1f" $t.AvgHoursPerJob}}{{else}}—{{end}}</td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+        {{else}}
+        <p class="no-data">No technician data available</p>
+        {{end}}
+    </div>
+
+    {{if .MonthlyTrends}}
+    <div class="section">
+        <h2>Monthly Trends</h2>
+        <table class="trends-table">
+            <thead>
+                <tr>
+                    <th>Month</th>
+                    <th class="right">Total Jobs</th>
+                    <th class="right">Total Sales</th>
+                    <th class="right">Avg Conv %</th>
+                    <th>Top Performer</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .MonthlyTrends}}
+                <tr>
+                    <td><strong>{{.MonthLabel}}</strong></td>
+                    <td class="right">{{.TotalJobs}}</td>
+                    <td class="right money">{{formatMoney .TotalSales}}</td>
+                    <td class="right percent">{{printf "%.1f%%" .AvgConversionRate}}</td>
+                    <td class="top-performer">
+                        {{if .TopPerformer}}
+                        <strong>{{.TopPerformer}}</strong> ({{formatMoney .TopPerformerSales}})
+                        {{else}}—{{end}}
+                    </td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+    {{end}}
+
+    <div class="section">
+        <h2>Individual Performance Details</h2>
+        {{range $i, $t := .Technicians}}
+        {{if lt $i 10}}
+        <div class="tech-card">
+            <div class="tech-card-header">
+                <h3>{{$t.Name}}</h3>
+                <span class="rank {{if eq $i 0}}rank-1{{else if eq $i 1}}rank-2{{else if eq $i 2}}rank-3{{else}}rank-other{{end}}">
+                    #{{add $i 1}}
+                </span>
+            </div>
+            <div class="tech-card-stats">
+                <div class="tech-stat">
+                    <div class="label">Jobs Run</div>
+                    <div class="value">{{$t.TotalJobs}}</div>
+                </div>
+                <div class="tech-stat">
+                    <div class="label">Jobs Sold</div>
+                    <div class="value">{{$t.SoldJobs}}</div>
+                </div>
+                <div class="tech-stat">
+                    <div class="label">Conversion</div>
+                    <div class="value">{{printf "%.1f%%" $t.ConversionRate}}</div>
+                </div>
+                <div class="tech-stat">
+                    <div class="label">Total Sales</div>
+                    <div class="value">{{formatMoney $t.TotalSales}}</div>
+                </div>
+            </div>
+            {{if $t.MonthlyData}}
+            <table>
+                <thead>
+                    <tr>
+                        <th>Month</th>
+                        <th class="right">Jobs</th>
+                        <th class="right">Sales</th>
+                        <th class="right">Conv %</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{range $t.MonthlyData}}
+                    <tr>
+                        <td>{{.MonthLabel}}</td>
+                        <td class="right">{{.Jobs}}</td>
+                        <td class="right money">{{formatMoney .Sales}}</td>
+                        <td class="right percent">{{printf "%.1f%%" .ConversionRate}}</td>
+                    </tr>
+                    {{end}}
+                </tbody>
+            </table>
+            {{else}}
+            <p class="no-data">No monthly data available</p>
+            {{end}}
+        </div>
+        {{end}}
+        {{end}}
+    </div>
+
+    <div class="footer">
+        Generated on {{.GeneratedAt.Format "January 2, 2006 at 3:04 PM"}} • ServiceTitan Analytics
+    </div>
+</body>
+
+</html>

@@ -4,20 +4,25 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"github.com/datsun80zx/sta.git/internal/report"
 )
 
 func reportTechnicians(ctx context.Context, db *sql.DB, args []string) {
+	// Check for --html flag first
+	htmlOutput, args := parseHTMLFlag(args)
+	outputFile, args := parseOutputFlag(args)
 	fromDate, toDate, remainingArgs := parseDateFlags(args)
 
-	// Note: Date filtering for technician reports would require re-calculating metrics
-	// For now, show all-time metrics but print the date range if specified
-	if fromDate != nil || toDate != nil {
-		fmt.Println("Note: Technician metrics are calculated across all imported data.")
-		fmt.Println("Date filtering will be supported in a future version.")
-		fmt.Println()
+	// If HTML output requested, generate HTML report
+	if htmlOutput || outputFile != "" {
+		generateTechnicianHTML(ctx, db, fromDate, toDate, outputFile)
+		return
 	}
-	_ = fromDate
-	_ = toDate
 
 	// Check for subcommand
 	subcommand := "overview"
@@ -42,22 +47,120 @@ func reportTechnicians(ctx context.Context, db *sql.DB, args []string) {
 	}
 }
 
+// parseHTMLFlag extracts --html flag from args
+func parseHTMLFlag(args []string) (bool, []string) {
+	var remainingArgs []string
+	htmlOutput := false
+
+	for _, arg := range args {
+		if arg == "--html" {
+			htmlOutput = true
+		} else {
+			remainingArgs = append(remainingArgs, arg)
+		}
+	}
+
+	return htmlOutput, remainingArgs
+}
+
+func generateTechnicianHTML(ctx context.Context, db *sql.DB, fromDate, toDate *time.Time, outputFile string) {
+	// Default output filename if not specified
+	if outputFile == "" {
+		timestamp := time.Now().Format("2006-01-02")
+		outputFile = fmt.Sprintf("technician-report-%s.html", timestamp)
+	}
+
+	// Ensure .html extension
+	if !strings.HasSuffix(strings.ToLower(outputFile), ".html") {
+		outputFile += ".html"
+	}
+
+	fmt.Println("Generating technician performance report...")
+	if fromDate != nil || toDate != nil {
+		fmt.Print("  Date range: ")
+		if fromDate != nil {
+			fmt.Print(fromDate.Format("2006-01-02"))
+		} else {
+			fmt.Print("(all)")
+		}
+		fmt.Print(" to ")
+		if toDate != nil {
+			fmt.Print(toDate.Format("2006-01-02"))
+		} else {
+			fmt.Print("(all)")
+		}
+		fmt.Println()
+	}
+	fmt.Println()
+
+	// Generate report data
+	techReport, err := report.GenerateTechnicianReport(ctx, db, fromDate, toDate)
+	if err != nil {
+		fmt.Printf("❌ Error generating report: %v\n", err)
+		return
+	}
+
+	// Create renderer
+	renderer, err := report.NewRenderer()
+	if err != nil {
+		fmt.Printf("❌ Error initializing renderer: %v\n", err)
+		return
+	}
+
+	// Create output file
+	file, err := os.Create(outputFile)
+	if err != nil {
+		fmt.Printf("❌ Error creating output file: %v\n", err)
+		return
+	}
+	defer file.Close()
+
+	// Render report
+	if err := renderer.RenderTechnicianReport(file, techReport); err != nil {
+		fmt.Printf("❌ Error rendering report: %v\n", err)
+		return
+	}
+
+	absPath, _ := filepath.Abs(outputFile)
+	fmt.Printf("✅ Report generated: %s\n", absPath)
+	fmt.Println()
+	fmt.Println("📊 Report Summary:")
+	fmt.Printf("   • %d technicians analyzed\n", techReport.TotalTechnicians)
+	fmt.Printf("   • %d total jobs completed\n", techReport.TotalJobsCompleted)
+	fmt.Printf("   • %s total sales\n", formatCurrency(techReport.TotalSales))
+	fmt.Printf("   • %.1f%% average conversion rate\n", techReport.AvgConversionRate)
+	if len(techReport.MonthlyTrends) > 0 {
+		fmt.Printf("   • %d months of trend data\n", len(techReport.MonthlyTrends))
+	}
+	fmt.Println()
+	fmt.Println("💡 Open the HTML file in your browser and print to PDF (Ctrl+P)")
+}
+
 func printTechnicianUsage() {
 	fmt.Println(`Technician Performance Reports
 
 Usage:
-  sta report technicians [type]
+  sta report technicians [type] [options]
+  sta report technicians --html [options]
 
-Report Types:
+Report Types (console output):
   overview     All KPIs for each technician (default)
   sales        Ranked by average sale amount
   conversion   Ranked by conversion rate (min 5 opportunities)
   efficiency   Ranked by average hours per job (lower is better)
 
+HTML Report Options:
+  --html                Generate HTML report instead of console output
+  --output FILE         Write HTML report to FILE
+  --from YYYY-MM-DD     Filter jobs completed on or after date
+  --to YYYY-MM-DD       Filter jobs completed on or before date
+
 Examples:
   sta report technicians
   sta report technicians sales
-  sta report technicians conversion`)
+  sta report technicians --html
+  sta report technicians --html --output q4-techs.html
+  sta report technicians --html --from 2024-10-01 --to 2024-12-31`)
 }
 
 func reportTechnicianOverview(ctx context.Context, db *sql.DB) {
@@ -68,11 +171,13 @@ func reportTechnicianOverview(ctx context.Context, db *sql.DB) {
 			tm.avg_sale,
 			tm.conversion_rate,
 			COALESCE(tm.jobs_serviced, 0) as jobs_serviced,
-			tm.avg_hours_per_job
+			tm.avg_hours_per_job,
+			tm.avg_margin_pct,
+			tm.total_gross_profit
 		FROM technicians t
 		JOIN technician_metrics tm ON t.id = tm.technician_id
 		WHERE (tm.jobs_sold > 0 OR tm.jobs_serviced > 0)
-		ORDER BY t.name
+		ORDER BY COALESCE(tm.total_gross_profit, 0) DESC
 	`
 
 	rows, err := db.QueryContext(ctx, query)
@@ -103,6 +208,8 @@ func reportTechnicianOverview(ctx context.Context, db *sql.DB) {
 			&r.ConversionRate,
 			&r.JobsServiced,
 			&r.AvgHoursPerJob,
+			&r.AvgMarginPct,
+			&r.TotalGrossProfit,
 		)
 		if err != nil {
 			fmt.Printf("Error reading results: %v\n", err)
@@ -119,8 +226,8 @@ func reportTechnicianOverview(ctx context.Context, db *sql.DB) {
 
 	fmt.Println("Technician Performance Overview")
 	fmt.Println("════════════════════════════════════════════════════════════════════════════════════════════════════════")
-	fmt.Printf("%-25s  %6s  %11s  %10s  %8s  %10s\n",
-		"Technician", "Sold", "Avg Sale", "Conv %", "Serviced", "Avg Hrs")
+	fmt.Printf("%-25s  %6s  %11s  %10s  %8s  %10s  %9s  %14s\n",
+		"Technician", "Sold", "Avg Sale", "Conv %", "Serviced", "Avg Hrs", "Margin %", "Total Profit")
 	fmt.Println("────────────────────────────────────────────────────────────────────────────────────────────────────────")
 
 	for _, r := range results {
@@ -144,25 +251,25 @@ func reportTechnicianOverview(ctx context.Context, db *sql.DB) {
 			avgHrs = fmt.Sprintf("%8.1f", r.AvgHoursPerJob.Float64)
 		}
 
-		// marginPct := "N/A"
-		// if r.AvgMarginPct.Valid {
-		// 	marginPct = fmt.Sprintf("%7.1f%%", r.AvgMarginPct.Float64)
-		// }
+		marginPct := "N/A"
+		if r.AvgMarginPct.Valid {
+			marginPct = fmt.Sprintf("%7.1f%%", r.AvgMarginPct.Float64)
+		}
 
-		// totalProfit := "N/A"
-		// if r.TotalGrossProfit.Valid {
-		// 	totalProfit = fmt.Sprintf("$%13.2f", r.TotalGrossProfit.Float64)
-		// }
+		totalProfit := "N/A"
+		if r.TotalGrossProfit.Valid {
+			totalProfit = fmt.Sprintf("$%13.2f", r.TotalGrossProfit.Float64)
+		}
 
-		fmt.Printf("%-25s  %6d  %11s  %10s  %8d  %10s\n",
+		fmt.Printf("%-25s  %6d  %11s  %10s  %8d  %10s  %9s  %14s\n",
 			name,
 			r.JobsSold,
 			avgSale,
 			convRate,
 			r.JobsServiced,
 			avgHrs,
-			// marginPct,
-			// totalProfit,
+			marginPct,
+			totalProfit,
 		)
 	}
 	fmt.Println("════════════════════════════════════════════════════════════════════════════════════════════════════════")
