@@ -198,6 +198,11 @@ func (p *CSVParser) parseJobRow(record []string, colMap map[string]int, rowNum i
 	job.Converted = parseBool(getField(record, colMap, "converted"))
 	job.ZeroDollarJob = parseBool(getField(record, colMap, "zero dollar job"))
 
+	// Project and Callback tracking
+	job.ProjectID = parseNullableString(getField(record, colMap, "project id"))
+	job.WarrantyForJobID = parseNullableString(getField(record, colMap, "warranty for job id"))
+	job.RecallForJobID = parseNullableString(getField(record, colMap, "recall for job id"))
+
 	return job, nil
 }
 

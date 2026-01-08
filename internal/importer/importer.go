@@ -472,6 +472,9 @@ func (i *Importer) importJobs(ctx context.Context, tx *sql.Tx, jobs []parser.Job
 			IsOpportunity:         job.Opportunity,
 			IsConverted:           job.Converted,
 			PrimaryTechnician:     sqlNullString(job.PrimaryTechnician),
+			ProjectID:             sqlNullString(job.ProjectID),
+			WarrantyForJobID:      sqlNullString(job.WarrantyForJobID),
+			RecallForJobID:        sqlNullString(job.RecallForJobID),
 		}
 
 		_, err := txQueries.CreateJob(ctx, params)

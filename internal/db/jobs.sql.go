@@ -21,11 +21,12 @@ INSERT INTO jobs (
     campaign_name, campaign_category, call_campaign,
     jobs_subtotal, job_total, estimate_sales_subtotal,
     invoice_id, total_hours_worked, priority, survey_score,
-    estimate_count, is_opportunity, is_converted, primary_technician
+    estimate_count, is_opportunity, is_converted, primary_technician,
+    project_id, warranty_for_job_id, recall_for_job_id
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29
 )
-RETURNING id, customer_id, import_batch_id, job_type, business_unit, status, job_creation_date, job_schedule_date, job_completion_date, assigned_technician, sold_by_technician, booked_by, campaign_name, campaign_category, call_campaign, jobs_subtotal, job_total, invoice_id, total_hours_worked, priority, survey_score, created_at, estimate_count, is_opportunity, is_converted, primary_technician, estimate_sales_subtotal
+RETURNING id, customer_id, import_batch_id, job_type, business_unit, status, job_creation_date, job_schedule_date, job_completion_date, assigned_technician, sold_by_technician, booked_by, campaign_name, campaign_category, call_campaign, jobs_subtotal, job_total, invoice_id, total_hours_worked, priority, survey_score, created_at, estimate_count, is_opportunity, is_converted, primary_technician, warranty, recall, estimate_sales_subtotal, project_id, warranty_for_job_id, recall_for_job_id
 `
 
 type CreateJobParams struct {
@@ -55,6 +56,9 @@ type CreateJobParams struct {
 	IsOpportunity         bool            `json:"is_opportunity"`
 	IsConverted           bool            `json:"is_converted"`
 	PrimaryTechnician     sql.NullString  `json:"primary_technician"`
+	ProjectID             sql.NullString  `json:"project_id"`
+	WarrantyForJobID      sql.NullString  `json:"warranty_for_job_id"`
+	RecallForJobID        sql.NullString  `json:"recall_for_job_id"`
 }
 
 func (q *Queries) CreateJob(ctx context.Context, arg CreateJobParams) (Job, error) {
@@ -85,6 +89,9 @@ func (q *Queries) CreateJob(ctx context.Context, arg CreateJobParams) (Job, erro
 		arg.IsOpportunity,
 		arg.IsConverted,
 		arg.PrimaryTechnician,
+		arg.ProjectID,
+		arg.WarrantyForJobID,
+		arg.RecallForJobID,
 	)
 	var i Job
 	err := row.Scan(
@@ -114,7 +121,12 @@ func (q *Queries) CreateJob(ctx context.Context, arg CreateJobParams) (Job, erro
 		&i.IsOpportunity,
 		&i.IsConverted,
 		&i.PrimaryTechnician,
+		&i.Warranty,
+		&i.Recall,
 		&i.EstimateSalesSubtotal,
+		&i.ProjectID,
+		&i.WarrantyForJobID,
+		&i.RecallForJobID,
 	)
 	return i, err
 }

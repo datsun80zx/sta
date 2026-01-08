@@ -98,7 +98,12 @@ type Job struct {
 	IsOpportunity         bool            `json:"is_opportunity"`
 	IsConverted           bool            `json:"is_converted"`
 	PrimaryTechnician     sql.NullString  `json:"primary_technician"`
+	Warranty              bool            `json:"warranty"`
+	Recall                bool            `json:"recall"`
 	EstimateSalesSubtotal decimal.Decimal `json:"estimate_sales_subtotal"`
+	ProjectID             sql.NullString  `json:"project_id"`
+	WarrantyForJobID      sql.NullString  `json:"warranty_for_job_id"`
+	RecallForJobID        sql.NullString  `json:"recall_for_job_id"`
 }
 
 type JobMetric struct {

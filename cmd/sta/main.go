@@ -129,7 +129,7 @@ func handleList(ctx context.Context, db *sql.DB) {
 func handleReport(ctx context.Context, db *sql.DB, args []string) {
 	if len(args) < 1 {
 		fmt.Println("Error: report requires a report type")
-		fmt.Println("Available reports: summary, job-types, campaigns, customers, red-flags")
+		fmt.Println("Available reports: summary, job-types, campaigns, customers, red-flags, technicians")
 		os.Exit(1)
 	}
 
@@ -151,7 +151,7 @@ func handleReport(ctx context.Context, db *sql.DB, args []string) {
 		reportTechnicians(ctx, db, reportArgs)
 	default:
 		fmt.Printf("Unknown report type: %s\n", reportType)
-		fmt.Println("Available reports: summary, job-types, campaigns, customers, red-flags")
+		fmt.Println("Available reports: summary, job-types, campaigns, customers, red-flags, technicians")
 		os.Exit(1)
 	}
 }

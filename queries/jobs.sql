@@ -7,9 +7,10 @@ INSERT INTO jobs (
     campaign_name, campaign_category, call_campaign,
     jobs_subtotal, job_total, estimate_sales_subtotal,
     invoice_id, total_hours_worked, priority, survey_score,
-    estimate_count, is_opportunity, is_converted, primary_technician
+    estimate_count, is_opportunity, is_converted, primary_technician,
+    project_id, warranty_for_job_id, recall_for_job_id
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29
 )
 RETURNING *;
 

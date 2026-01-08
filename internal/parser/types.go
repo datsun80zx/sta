@@ -69,6 +69,13 @@ type JobRow struct {
 	Recall        bool
 	Converted     bool
 	ZeroDollarJob bool
+
+	// Project grouping for sales deduplication
+	ProjectID *string
+
+	// Callback tracking
+	WarrantyForJobID *string
+	RecallForJobID   *string
 }
 
 // InvoiceRow represents a parsed row from the Invoices report
