@@ -3,562 +3,726 @@ package main
 import (
 	"context"
 	"database/sql"
+	"flag"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
+	"text/tabwriter"
 	"time"
 
-	"github.com/datsun80zx/sta.git/internal/report"
+	"github.com/datsun80zx/sta.git/internal/analytics"
 )
 
-func reportTechnicians(ctx context.Context, db *sql.DB, args []string) {
-	// Check for --html flag first
-	htmlOutput, args := parseHTMLFlag(args)
-	outputFile, args := parseOutputFlag(args)
-	fromDate, toDate, remainingArgs := parseDateFlags(args)
+// TechnicianCommand handles all technician-related CLI operations
+type TechnicianCommand struct {
+	db  *sql.DB
+	svc *analytics.Service
+}
 
-	// If HTML output requested, generate HTML report
-	if htmlOutput || outputFile != "" {
-		generateTechnicianHTML(ctx, db, fromDate, toDate, outputFile)
-		return
+// NewTechnicianCommand creates a new technician command handler
+func NewTechnicianCommand(db *sql.DB) *TechnicianCommand {
+	return &TechnicianCommand{
+		db:  db,
+		svc: analytics.NewService(db),
+	}
+}
+
+// Run executes the technician command with the given arguments
+func (tc *TechnicianCommand) Run(ctx context.Context, args []string) error {
+	if len(args) == 0 {
+		tc.printUsage()
+		return nil
 	}
 
-	// Check for subcommand
-	subcommand := "overview"
-	if len(remainingArgs) > 0 {
-		subcommand = remainingArgs[0]
-	}
+	subcommand := args[0]
+	subargs := args[1:]
 
 	switch subcommand {
-	case "overview", "":
-		reportTechnicianOverview(ctx, db)
-	case "sales":
-		reportTechnicianSales(ctx, db)
-	case "conversion":
-		reportTechnicianConversion(ctx, db)
-	case "efficiency":
-		reportTechnicianEfficiency(ctx, db)
+	case "kpis":
+		return tc.runKPIs(ctx, subargs)
+	case "trends":
+		return tc.runTrends(ctx, subargs)
+	case "yoy":
+		return tc.runYoY(ctx, subargs)
+	case "teams":
+		return tc.runTeams(ctx, subargs)
+	case "list":
+		return tc.runList(ctx, subargs)
 	case "help":
-		printTechnicianUsage()
+		tc.printUsage()
+		return nil
 	default:
-		fmt.Printf("Unknown technician report type: %s\n", subcommand)
-		printTechnicianUsage()
+		fmt.Printf("Unknown subcommand: %s\n\n", subcommand)
+		tc.printUsage()
+		return fmt.Errorf("unknown subcommand: %s", subcommand)
 	}
 }
 
-// parseHTMLFlag extracts --html flag from args
-func parseHTMLFlag(args []string) (bool, []string) {
-	var remainingArgs []string
-	htmlOutput := false
+func (tc *TechnicianCommand) printUsage() {
+	fmt.Println(`Usage: sta technicians <subcommand> [options]
 
-	for _, arg := range args {
-		if arg == "--html" {
-			htmlOutput = true
-		} else {
-			remainingArgs = append(remainingArgs, arg)
-		}
-	}
-
-	return htmlOutput, remainingArgs
-}
-
-func generateTechnicianHTML(ctx context.Context, db *sql.DB, fromDate, toDate *time.Time, outputFile string) {
-	// Default output filename if not specified
-	if outputFile == "" {
-		timestamp := time.Now().Format("2006-01-02")
-		outputFile = fmt.Sprintf("technician-report-%s.html", timestamp)
-	}
-
-	// Ensure .html extension
-	if !strings.HasSuffix(strings.ToLower(outputFile), ".html") {
-		outputFile += ".html"
-	}
-
-	fmt.Println("Generating technician performance report...")
-	if fromDate != nil || toDate != nil {
-		fmt.Print("  Date range: ")
-		if fromDate != nil {
-			fmt.Print(fromDate.Format("2006-01-02"))
-		} else {
-			fmt.Print("(all)")
-		}
-		fmt.Print(" to ")
-		if toDate != nil {
-			fmt.Print(toDate.Format("2006-01-02"))
-		} else {
-			fmt.Print("(all)")
-		}
-		fmt.Println()
-	}
-	fmt.Println()
-
-	// Generate report data
-	techReport, err := report.GenerateTechnicianReport(ctx, db, fromDate, toDate)
-	if err != nil {
-		fmt.Printf("❌ Error generating report: %v\n", err)
-		return
-	}
-
-	// Create renderer
-	renderer, err := report.NewRenderer()
-	if err != nil {
-		fmt.Printf("❌ Error initializing renderer: %v\n", err)
-		return
-	}
-
-	// Create output file
-	file, err := os.Create(outputFile)
-	if err != nil {
-		fmt.Printf("❌ Error creating output file: %v\n", err)
-		return
-	}
-	defer file.Close()
-
-	// Render report
-	if err := renderer.RenderTechnicianReport(file, techReport); err != nil {
-		fmt.Printf("❌ Error rendering report: %v\n", err)
-		return
-	}
-
-	absPath, _ := filepath.Abs(outputFile)
-	fmt.Printf("✅ Report generated: %s\n", absPath)
-	fmt.Println()
-	fmt.Println("📊 Report Summary:")
-	fmt.Printf("   • %d technicians analyzed\n", techReport.TotalTechnicians)
-	fmt.Printf("   • %d total jobs completed\n", techReport.TotalJobsCompleted)
-	fmt.Printf("   • %s total sales\n", formatCurrency(techReport.TotalSales))
-	fmt.Printf("   • %.1f%% average conversion rate\n", techReport.AvgConversionRate)
-	if len(techReport.MonthlyTrends) > 0 {
-		fmt.Printf("   • %d months of trend data\n", len(techReport.MonthlyTrends))
-	}
-	fmt.Println()
-	fmt.Println("💡 Open the HTML file in your browser and print to PDF (Ctrl+P)")
-}
-
-func printTechnicianUsage() {
-	fmt.Println(`Technician Performance Reports
-
-Usage:
-  sta report technicians [type] [options]
-  sta report technicians --html [options]
-
-Report Types (console output):
-  overview     All KPIs for each technician (default)
-  sales        Ranked by average sale amount
-  conversion   Ranked by conversion rate (min 5 opportunities)
-  efficiency   Ranked by average hours per job (lower is better)
-
-HTML Report Options:
-  --html                Generate HTML report instead of console output
-  --output FILE         Write HTML report to FILE
-  --from YYYY-MM-DD     Filter jobs completed on or after date
-  --to YYYY-MM-DD       Filter jobs completed on or before date
+Subcommands:
+  kpis     Show KPI scorecards for technicians
+  trends   Show KPI trends over time (weekly/monthly/quarterly/yearly)
+  yoy      Show year-over-year comparison
+  teams    Show team/business unit aggregated KPIs
+  list     List all technicians
 
 Examples:
-  sta report technicians
-  sta report technicians sales
-  sta report technicians --html
-  sta report technicians --html --output q4-techs.html
-  sta report technicians --html --from 2024-10-01 --to 2024-12-31`)
+  sta technicians kpis
+  sta technicians kpis --from 2024-01-01 --to 2024-12-31
+  sta technicians kpis --business-unit "HVAC"
+  sta technicians trends --period monthly --from 2024-01-01 --to 2024-12-31
+  sta technicians yoy --from 2025-01-01 --to 2025-03-31
+  sta technicians teams`)
 }
 
-func reportTechnicianOverview(ctx context.Context, db *sql.DB) {
-	query := `
-		SELECT 
-			t.name,
-			COALESCE(tm.jobs_sold, 0) as jobs_sold,
-			tm.avg_sale,
-			tm.conversion_rate,
-			COALESCE(tm.jobs_serviced, 0) as jobs_serviced,
-			tm.avg_hours_per_job,
-			tm.avg_margin_pct,
-			tm.total_gross_profit
-		FROM technicians t
-		JOIN technician_metrics tm ON t.id = tm.technician_id
-		WHERE (tm.jobs_sold > 0 OR tm.jobs_serviced > 0)
-		ORDER BY COALESCE(tm.total_gross_profit, 0) DESC
-	`
+// -----------------------------------------------------------------
+// Subcommand: kpis
+// -----------------------------------------------------------------
 
-	rows, err := db.QueryContext(ctx, query)
-	if err != nil {
-		fmt.Printf("Error running report: %v\n", err)
-		return
-	}
-	defer rows.Close()
+func (tc *TechnicianCommand) runKPIs(ctx context.Context, args []string) error {
+	fs := flag.NewFlagSet("kpis", flag.ExitOnError)
+	fromStr := fs.String("from", "", "Start date (YYYY-MM-DD)")
+	toStr := fs.String("to", "", "End date (YYYY-MM-DD)")
+	businessUnit := fs.String("business-unit", "", "Filter by business unit")
+	techName := fs.String("technician", "", "Filter by technician name")
+	sortBy := fs.String("sort", "total_jobs", "Sort by: callback_rate, time_on_job, conversion_rate, avg_ticket, estimates_per_job, total_jobs")
+	ascending := fs.Bool("asc", false, "Sort ascending (default is descending)")
 
-	type TechOverview struct {
-		Name             string
-		JobsSold         int
-		AvgSale          sql.NullFloat64
-		ConversionRate   sql.NullFloat64
-		JobsServiced     int
-		AvgHoursPerJob   sql.NullFloat64
-		AvgMarginPct     sql.NullFloat64
-		TotalGrossProfit sql.NullFloat64
+	if err := fs.Parse(args); err != nil {
+		return err
 	}
 
-	var results []TechOverview
-	for rows.Next() {
-		var r TechOverview
-		err := rows.Scan(
-			&r.Name,
-			&r.JobsSold,
-			&r.AvgSale,
-			&r.ConversionRate,
-			&r.JobsServiced,
-			&r.AvgHoursPerJob,
-			&r.AvgMarginPct,
-			&r.TotalGrossProfit,
-		)
+	// Build filter
+	filter := analytics.TechnicianFilter{}
+
+	if *fromStr != "" && *toStr != "" {
+		from, err := time.Parse("2006-01-02", *fromStr)
 		if err != nil {
-			fmt.Printf("Error reading results: %v\n", err)
-			return
+			return fmt.Errorf("invalid from date: %w", err)
 		}
-		results = append(results, r)
+		to, err := time.Parse("2006-01-02", *toStr)
+		if err != nil {
+			return fmt.Errorf("invalid to date: %w", err)
+		}
+		filter.DateRange = &analytics.DateRange{From: from, To: to}
 	}
 
-	if len(results) == 0 {
-		fmt.Println("No technician data found")
-		fmt.Println("Run 'sta import' with data that includes technician information")
-		return
+	if *businessUnit != "" {
+		filter.BusinessUnit = businessUnit
 	}
 
-	fmt.Println("Technician Performance Overview")
-	fmt.Println("════════════════════════════════════════════════════════════════════════════════════════════════════════")
-	fmt.Printf("%-25s  %6s  %11s  %10s  %8s  %10s  %9s  %14s\n",
-		"Technician", "Sold", "Avg Sale", "Conv %", "Serviced", "Avg Hrs", "Margin %", "Total Profit")
-	fmt.Println("────────────────────────────────────────────────────────────────────────────────────────────────────────")
-
-	for _, r := range results {
-		name := r.Name
-		if len(name) > 25 {
-			name = name[:22] + "..."
-		}
-
-		avgSale := "N/A"
-		if r.AvgSale.Valid {
-			avgSale = fmt.Sprintf("$%10.2f", r.AvgSale.Float64)
-		}
-
-		convRate := "N/A"
-		if r.ConversionRate.Valid {
-			convRate = fmt.Sprintf("%8.1f%%", r.ConversionRate.Float64)
-		}
-
-		avgHrs := "N/A"
-		if r.AvgHoursPerJob.Valid {
-			avgHrs = fmt.Sprintf("%8.1f", r.AvgHoursPerJob.Float64)
-		}
-
-		marginPct := "N/A"
-		if r.AvgMarginPct.Valid {
-			marginPct = fmt.Sprintf("%7.1f%%", r.AvgMarginPct.Float64)
-		}
-
-		totalProfit := "N/A"
-		if r.TotalGrossProfit.Valid {
-			totalProfit = fmt.Sprintf("$%13.2f", r.TotalGrossProfit.Float64)
-		}
-
-		fmt.Printf("%-25s  %6d  %11s  %10s  %8d  %10s  %9s  %14s\n",
-			name,
-			r.JobsSold,
-			avgSale,
-			convRate,
-			r.JobsServiced,
-			avgHrs,
-			marginPct,
-			totalProfit,
-		)
+	// Get KPIs
+	kpis, err := tc.svc.GetTechnicianKPIs(ctx, filter)
+	if err != nil {
+		return fmt.Errorf("failed to get technician KPIs: %w", err)
 	}
-	fmt.Println("════════════════════════════════════════════════════════════════════════════════════════════════════════")
-	fmt.Printf("Total: %d technicians\n", len(results))
+
+	// Filter by technician name if specified
+	if *techName != "" {
+		var filtered []analytics.TechnicianKPIs
+		for _, kpi := range kpis {
+			if strings.Contains(strings.ToLower(kpi.TechnicianName), strings.ToLower(*techName)) {
+				filtered = append(filtered, kpi)
+			}
+		}
+		kpis = filtered
+	}
+
+	// Sort results
+	sortField := parseSortField(*sortBy)
+	analytics.SortTechnicianKPIs(kpis, sortField, *ascending)
+
+	// Print results
+	tc.printKPIsTable(kpis, filter)
+
+	return nil
 }
 
-func reportTechnicianSales(ctx context.Context, db *sql.DB) {
-	query := `
-		SELECT 
-			t.name,
-			tm.jobs_sold,
-			tm.total_sales,
-			tm.avg_sale,
-			tm.avg_margin_pct,
-			tm.total_gross_profit
-		FROM technicians t
-		JOIN technician_metrics tm ON t.id = tm.technician_id
-		WHERE tm.jobs_sold > 0
-		ORDER BY tm.avg_sale DESC
-	`
+func (tc *TechnicianCommand) printKPIsTable(kpis []analytics.TechnicianKPIs, filter analytics.TechnicianFilter) {
+	// Print header
+	fmt.Println()
+	fmt.Println("═══════════════════════════════════════════════════════════════════════════════════════════════════════════════")
+	fmt.Println("                                    TECHNICIAN KPI SCORECARD")
+	fmt.Println("═══════════════════════════════════════════════════════════════════════════════════════════════════════════════")
 
-	rows, err := db.QueryContext(ctx, query)
-	if err != nil {
-		fmt.Printf("Error running report: %v\n", err)
-		return
+	if filter.DateRange != nil {
+		fmt.Printf("  Date Range: %s to %s\n", filter.DateRange.From.Format("2006-01-02"), filter.DateRange.To.Format("2006-01-02"))
+	} else {
+		fmt.Println("  Date Range: All Time")
 	}
-	defer rows.Close()
-
-	type TechSales struct {
-		Name             string
-		JobsSold         int
-		TotalSales       float64
-		AvgSale          sql.NullFloat64
-		AvgMarginPct     sql.NullFloat64
-		TotalGrossProfit sql.NullFloat64
+	if filter.BusinessUnit != nil {
+		fmt.Printf("  Business Unit: %s\n", *filter.BusinessUnit)
 	}
+	fmt.Println("───────────────────────────────────────────────────────────────────────────────────────────────────────────────")
+	fmt.Println()
 
-	var results []TechSales
-	for rows.Next() {
-		var r TechSales
-		err := rows.Scan(
-			&r.Name,
-			&r.JobsSold,
-			&r.TotalSales,
-			&r.AvgSale,
-			&r.AvgMarginPct,
-			&r.TotalGrossProfit,
-		)
-		if err != nil {
-			fmt.Printf("Error reading results: %v\n", err)
-			return
-		}
-		results = append(results, r)
-	}
-
-	if len(results) == 0 {
-		fmt.Println("No sales data found")
+	if len(kpis) == 0 {
+		fmt.Println("  No data found for the specified filters.")
+		fmt.Println()
 		return
 	}
 
-	fmt.Println("Technician Sales Performance (Ranked by Avg Sale)")
-	fmt.Println("════════════════════════════════════════════════════════════════════════════════════════════")
-	fmt.Printf("%-25s  %6s  %14s  %12s  %9s  %14s\n",
-		"Technician", "Jobs", "Total Sales", "Avg Sale", "Margin %", "Total Profit")
-	fmt.Println("────────────────────────────────────────────────────────────────────────────────────────────")
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 
-	for i, r := range results {
-		name := r.Name
-		if len(name) > 25 {
-			name = name[:22] + "..."
-		}
+	// Header row
+	fmt.Fprintln(w, "  Technician\tBusiness Unit\tJobs\tCallback %\tAvg Hours\tConversion %\tAvg Ticket\tEst/Job\t")
+	fmt.Fprintln(w, "  ──────────\t─────────────\t────\t──────────\t─────────\t────────────\t──────────\t───────\t")
 
-		avgSale := "N/A"
-		if r.AvgSale.Valid {
-			avgSale = fmt.Sprintf("$%11.2f", r.AvgSale.Float64)
-		}
-
-		marginPct := "N/A"
-		if r.AvgMarginPct.Valid {
-			marginPct = fmt.Sprintf("%7.1f%%", r.AvgMarginPct.Float64)
-		}
-
-		totalProfit := "N/A"
-		if r.TotalGrossProfit.Valid {
-			totalProfit = fmt.Sprintf("$%13.2f", r.TotalGrossProfit.Float64)
-		}
-
-		rank := "   "
-		if i < 3 {
-			medals := []string{"🥇 ", "🥈 ", "🥉 "}
-			rank = medals[i]
-		}
-
-		fmt.Printf("%s%-22s  %6d  $%13.2f  %12s  %9s  %14s\n",
-			rank,
-			name,
-			r.JobsSold,
-			r.TotalSales,
-			avgSale,
-			marginPct,
-			totalProfit,
+	// Data rows
+	for _, kpi := range kpis {
+		fmt.Fprintf(w, "  %s\t%s\t%d\t%.1f%%\t%.1f\t%.1f%%\t$%.0f\t%.1f\t\n",
+			truncateName(kpi.TechnicianName, 20),
+			truncateName(kpi.BusinessUnit, 15),
+			kpi.TotalJobsCompleted,
+			kpi.CallbackRate,
+			kpi.AvgTimeOnJob,
+			kpi.ConversionRate,
+			kpi.AvgTicket,
+			kpi.AvgEstimatesPerJob,
 		)
 	}
-	fmt.Println("════════════════════════════════════════════════════════════════════════════════════════════")
+
+	w.Flush()
+	fmt.Println()
+	fmt.Printf("  Total technicians: %d\n", len(kpis))
+	fmt.Println()
 }
 
-func reportTechnicianConversion(ctx context.Context, db *sql.DB) {
-	query := `
-		SELECT 
-			t.name,
-			tm.opportunities,
-			tm.conversions,
-			tm.conversion_rate,
-			tm.avg_sale
-		FROM technicians t
-		JOIN technician_metrics tm ON t.id = tm.technician_id
-		WHERE tm.opportunities >= 5
-		ORDER BY tm.conversion_rate DESC NULLS LAST
-	`
+// -----------------------------------------------------------------
+// Subcommand: trends
+// -----------------------------------------------------------------
 
-	rows, err := db.QueryContext(ctx, query)
+func (tc *TechnicianCommand) runTrends(ctx context.Context, args []string) error {
+	fs := flag.NewFlagSet("trends", flag.ExitOnError)
+	fromStr := fs.String("from", "", "Start date (YYYY-MM-DD) - required")
+	toStr := fs.String("to", "", "End date (YYYY-MM-DD) - required")
+	periodStr := fs.String("period", "monthly", "Period type: weekly, monthly, quarterly, yearly")
+	techName := fs.String("technician", "", "Filter by technician name")
+	metric := fs.String("metric", "all", "Metric to show: all, callback_rate, conversion_rate, avg_ticket, time_on_job")
+
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	if *fromStr == "" || *toStr == "" {
+		fmt.Println("Error: --from and --to are required for trends")
+		return fmt.Errorf("missing required date range")
+	}
+
+	from, err := time.Parse("2006-01-02", *fromStr)
 	if err != nil {
-		fmt.Printf("Error running report: %v\n", err)
-		return
+		return fmt.Errorf("invalid from date: %w", err)
 	}
-	defer rows.Close()
-
-	type TechConversion struct {
-		Name           string
-		Opportunities  int
-		Conversions    int
-		ConversionRate sql.NullFloat64
-		AvgSale        sql.NullFloat64
+	to, err := time.Parse("2006-01-02", *toStr)
+	if err != nil {
+		return fmt.Errorf("invalid to date: %w", err)
 	}
 
-	var results []TechConversion
-	for rows.Next() {
-		var r TechConversion
-		err := rows.Scan(
-			&r.Name,
-			&r.Opportunities,
-			&r.Conversions,
-			&r.ConversionRate,
-			&r.AvgSale,
-		)
-		if err != nil {
-			fmt.Printf("Error reading results: %v\n", err)
-			return
-		}
-		results = append(results, r)
+	dateRange := analytics.DateRange{From: from, To: to}
+	periodType := parsePeriodType(*periodStr)
+
+	// Get trends
+	trends, err := tc.svc.GetTechnicianTrends(ctx, dateRange, periodType, nil)
+	if err != nil {
+		return fmt.Errorf("failed to get trends: %w", err)
 	}
 
-	if len(results) == 0 {
-		fmt.Println("No conversion data found (minimum 5 opportunities required)")
-		return
+	// Filter by technician name if specified
+	if *techName != "" {
+		var filtered []analytics.TechnicianTrend
+		for _, trend := range trends {
+			if strings.Contains(strings.ToLower(trend.TechnicianName), strings.ToLower(*techName)) {
+				filtered = append(filtered, trend)
+			}
+		}
+		trends = filtered
 	}
 
-	fmt.Println("Technician Conversion Rates (Min 5 Opportunities)")
-	fmt.Println("════════════════════════════════════════════════════════════════════════════════")
-	fmt.Printf("%-25s  %12s  %11s  %12s  %12s\n",
-		"Technician", "Opportunities", "Conversions", "Conv Rate", "Avg Sale")
-	fmt.Println("────────────────────────────────────────────────────────────────────────────────")
+	// Print results
+	tc.printTrendsTable(trends, dateRange, periodType, *metric)
 
-	for i, r := range results {
-		name := r.Name
-		if len(name) > 25 {
-			name = name[:22] + "..."
-		}
-
-		convRate := "N/A"
-		if r.ConversionRate.Valid {
-			convRate = fmt.Sprintf("%10.1f%%", r.ConversionRate.Float64)
-		}
-
-		avgSale := "N/A"
-		if r.AvgSale.Valid {
-			avgSale = fmt.Sprintf("$%11.2f", r.AvgSale.Float64)
-		}
-
-		rank := "   "
-		if i < 3 {
-			medals := []string{"🥇 ", "🥈 ", "🥉 "}
-			rank = medals[i]
-		}
-
-		fmt.Printf("%s%-22s  %12d  %11d  %12s  %12s\n",
-			rank,
-			name,
-			r.Opportunities,
-			r.Conversions,
-			convRate,
-			avgSale,
-		)
-	}
-	fmt.Println("════════════════════════════════════════════════════════════════════════════════")
+	return nil
 }
 
-func reportTechnicianEfficiency(ctx context.Context, db *sql.DB) {
-	query := `
-		SELECT 
-			t.name,
-			tm.jobs_serviced,
-			tm.total_hours_worked,
-			tm.avg_hours_per_job,
-			tm.avg_estimates_per_job
-		FROM technicians t
-		JOIN technician_metrics tm ON t.id = tm.technician_id
-		WHERE tm.jobs_serviced > 0
-		ORDER BY tm.avg_hours_per_job ASC NULLS LAST
-	`
+func (tc *TechnicianCommand) printTrendsTable(trends []analytics.TechnicianTrend, dateRange analytics.DateRange, periodType analytics.PeriodType, metric string) {
+	fmt.Println()
+	fmt.Println("═══════════════════════════════════════════════════════════════════════════════════════════════════════════════")
+	fmt.Printf("                                    TECHNICIAN TRENDS (%s)\n", strings.ToUpper(string(periodType)))
+	fmt.Println("═══════════════════════════════════════════════════════════════════════════════════════════════════════════════")
+	fmt.Printf("  Date Range: %s to %s\n", dateRange.From.Format("2006-01-02"), dateRange.To.Format("2006-01-02"))
+	fmt.Println("───────────────────────────────────────────────────────────────────────────────────────────────────────────────")
+	fmt.Println()
 
-	rows, err := db.QueryContext(ctx, query)
+	if len(trends) == 0 {
+		fmt.Println("  No data found for the specified filters.")
+		fmt.Println()
+		return
+	}
+
+	for _, trend := range trends {
+		if len(trend.Periods) == 0 {
+			continue
+		}
+
+		fmt.Printf("  ▶ %s\n", trend.TechnicianName)
+		fmt.Println()
+
+		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+
+		// Build header based on metric selection
+		if metric == "all" {
+			fmt.Fprintln(w, "    Period\tJobs\tCallback %\tConversion %\tAvg Ticket\tAvg Hours\t")
+			fmt.Fprintln(w, "    ──────\t────\t──────────\t────────────\t──────────\t─────────\t")
+		} else {
+			fmt.Fprintf(w, "    Period\t%s\t\n", metricLabel(metric))
+			fmt.Fprintln(w, "    ──────\t──────────\t")
+		}
+
+		for _, p := range trend.Periods {
+			if metric == "all" {
+				fmt.Fprintf(w, "    %s\t%d\t%.1f%%\t%.1f%%\t$%.0f\t%.1f\t\n",
+					p.Period,
+					p.KPIs.TotalJobsCompleted,
+					p.KPIs.CallbackRate,
+					p.KPIs.ConversionRate,
+					p.KPIs.AvgTicket,
+					p.KPIs.AvgTimeOnJob,
+				)
+			} else {
+				fmt.Fprintf(w, "    %s\t%s\t\n", p.Period, formatMetricValue(p.KPIs, metric))
+			}
+		}
+
+		w.Flush()
+		fmt.Println()
+	}
+}
+
+// -----------------------------------------------------------------
+// Subcommand: yoy (Year-over-Year)
+// -----------------------------------------------------------------
+
+func (tc *TechnicianCommand) runYoY(ctx context.Context, args []string) error {
+	fs := flag.NewFlagSet("yoy", flag.ExitOnError)
+	fromStr := fs.String("from", "", "Current period start date (YYYY-MM-DD) - required")
+	toStr := fs.String("to", "", "Current period end date (YYYY-MM-DD) - required")
+	techName := fs.String("technician", "", "Filter by technician name")
+
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	if *fromStr == "" || *toStr == "" {
+		fmt.Println("Error: --from and --to are required for YoY comparison")
+		return fmt.Errorf("missing required date range")
+	}
+
+	from, err := time.Parse("2006-01-02", *fromStr)
 	if err != nil {
-		fmt.Printf("Error running report: %v\n", err)
+		return fmt.Errorf("invalid from date: %w", err)
+	}
+	to, err := time.Parse("2006-01-02", *toStr)
+	if err != nil {
+		return fmt.Errorf("invalid to date: %w", err)
+	}
+
+	currentPeriod := analytics.DateRange{From: from, To: to}
+
+	// Get YoY comparison
+	comparisons, err := tc.svc.GetYoYComparison(ctx, currentPeriod, nil)
+	if err != nil {
+		return fmt.Errorf("failed to get YoY comparison: %w", err)
+	}
+
+	// Filter by technician name if specified
+	if *techName != "" {
+		var filtered []analytics.YoYComparison
+		for _, comp := range comparisons {
+			if strings.Contains(strings.ToLower(comp.TechnicianName), strings.ToLower(*techName)) {
+				filtered = append(filtered, comp)
+			}
+		}
+		comparisons = filtered
+	}
+
+	// Print results
+	tc.printYoYTable(comparisons, currentPeriod)
+
+	return nil
+}
+
+func (tc *TechnicianCommand) printYoYTable(comparisons []analytics.YoYComparison, currentPeriod analytics.DateRange) {
+	priorPeriod := analytics.DateRange{
+		From: currentPeriod.From.AddDate(-1, 0, 0),
+		To:   currentPeriod.To.AddDate(-1, 0, 0),
+	}
+
+	fmt.Println()
+	fmt.Println("═══════════════════════════════════════════════════════════════════════════════════════════════════════════════")
+	fmt.Println("                                    YEAR-OVER-YEAR COMPARISON")
+	fmt.Println("═══════════════════════════════════════════════════════════════════════════════════════════════════════════════")
+	fmt.Printf("  Current Period: %s to %s\n", currentPeriod.From.Format("2006-01-02"), currentPeriod.To.Format("2006-01-02"))
+	fmt.Printf("  Prior Period:   %s to %s\n", priorPeriod.From.Format("2006-01-02"), priorPeriod.To.Format("2006-01-02"))
+	fmt.Println("───────────────────────────────────────────────────────────────────────────────────────────────────────────────")
+	fmt.Println()
+
+	if len(comparisons) == 0 {
+		fmt.Println("  No data found for the specified filters.")
+		fmt.Println()
 		return
 	}
-	defer rows.Close()
 
-	type TechEfficiency struct {
-		Name               string
-		JobsServiced       int
-		TotalHoursWorked   sql.NullFloat64
-		AvgHoursPerJob     sql.NullFloat64
-		AvgEstimatesPerJob sql.NullFloat64
+	for _, comp := range comparisons {
+		// Skip technicians with no data in either period
+		if comp.CurrentPeriod.KPIs.TotalJobsCompleted == 0 && comp.PriorPeriod.KPIs.TotalJobsCompleted == 0 {
+			continue
+		}
+
+		fmt.Printf("  ▶ %s\n", comp.TechnicianName)
+		fmt.Println()
+
+		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+
+		fmt.Fprintln(w, "    Metric\tPrior\tCurrent\tChange\t")
+		fmt.Fprintln(w, "    ──────\t─────\t───────\t──────\t")
+
+		// Total Jobs
+		fmt.Fprintf(w, "    Total Jobs\t%d\t%d\t%s\t\n",
+			comp.PriorPeriod.KPIs.TotalJobsCompleted,
+			comp.CurrentPeriod.KPIs.TotalJobsCompleted,
+			formatIntChange(comp.Changes.TotalJobsChange),
+		)
+
+		// Callback Rate (lower is better)
+		fmt.Fprintf(w, "    Callback Rate\t%.1f%%\t%.1f%%\t%s\t\n",
+			comp.PriorPeriod.KPIs.CallbackRate,
+			comp.CurrentPeriod.KPIs.CallbackRate,
+			formatPercentChangeInverse(comp.Changes.CallbackRateChange),
+		)
+
+		// Conversion Rate (higher is better)
+		fmt.Fprintf(w, "    Conversion Rate\t%.1f%%\t%.1f%%\t%s\t\n",
+			comp.PriorPeriod.KPIs.ConversionRate,
+			comp.CurrentPeriod.KPIs.ConversionRate,
+			formatPercentChange(comp.Changes.ConversionRateChange),
+		)
+
+		// Average Ticket (higher is better)
+		fmt.Fprintf(w, "    Avg Ticket\t$%.0f\t$%.0f\t%s\t\n",
+			comp.PriorPeriod.KPIs.AvgTicket,
+			comp.CurrentPeriod.KPIs.AvgTicket,
+			formatDollarChange(comp.Changes.AvgTicketChange),
+		)
+
+		// Time on Job (lower is better)
+		fmt.Fprintf(w, "    Avg Time on Job\t%.1f hrs\t%.1f hrs\t%s\t\n",
+			comp.PriorPeriod.KPIs.AvgTimeOnJob,
+			comp.CurrentPeriod.KPIs.AvgTimeOnJob,
+			formatHoursChangeInverse(comp.Changes.AvgTimeOnJobChange),
+		)
+
+		// Estimates per Job
+		fmt.Fprintf(w, "    Estimates/Job\t%.1f\t%.1f\t%s\t\n",
+			comp.PriorPeriod.KPIs.AvgEstimatesPerJob,
+			comp.CurrentPeriod.KPIs.AvgEstimatesPerJob,
+			formatFloatChange(comp.Changes.EstimatesPerJobChange),
+		)
+
+		w.Flush()
+		fmt.Println()
+	}
+}
+
+// -----------------------------------------------------------------
+// Subcommand: teams
+// -----------------------------------------------------------------
+
+func (tc *TechnicianCommand) runTeams(ctx context.Context, args []string) error {
+	fs := flag.NewFlagSet("teams", flag.ExitOnError)
+	fromStr := fs.String("from", "", "Start date (YYYY-MM-DD)")
+	toStr := fs.String("to", "", "End date (YYYY-MM-DD)")
+	showTechs := fs.Bool("show-technicians", false, "Show individual technicians within each team")
+
+	if err := fs.Parse(args); err != nil {
+		return err
 	}
 
-	var results []TechEfficiency
-	for rows.Next() {
-		var r TechEfficiency
-		err := rows.Scan(
-			&r.Name,
-			&r.JobsServiced,
-			&r.TotalHoursWorked,
-			&r.AvgHoursPerJob,
-			&r.AvgEstimatesPerJob,
-		)
+	// Build filter
+	filter := analytics.TechnicianFilter{}
+
+	if *fromStr != "" && *toStr != "" {
+		from, err := time.Parse("2006-01-02", *fromStr)
 		if err != nil {
-			fmt.Printf("Error reading results: %v\n", err)
-			return
+			return fmt.Errorf("invalid from date: %w", err)
 		}
-		results = append(results, r)
+		to, err := time.Parse("2006-01-02", *toStr)
+		if err != nil {
+			return fmt.Errorf("invalid to date: %w", err)
+		}
+		filter.DateRange = &analytics.DateRange{From: from, To: to}
 	}
 
-	if len(results) == 0 {
-		fmt.Println("No efficiency data found")
+	// Get team KPIs
+	teams, err := tc.svc.GetTeamKPIs(ctx, filter)
+	if err != nil {
+		return fmt.Errorf("failed to get team KPIs: %w", err)
+	}
+
+	// Print results
+	tc.printTeamsTable(teams, filter, *showTechs)
+
+	return nil
+}
+
+func (tc *TechnicianCommand) printTeamsTable(teams []analytics.TeamKPIs, filter analytics.TechnicianFilter, showTechs bool) {
+	fmt.Println()
+	fmt.Println("═══════════════════════════════════════════════════════════════════════════════════════════════════════════════")
+	fmt.Println("                                    TEAM KPI SUMMARY")
+	fmt.Println("═══════════════════════════════════════════════════════════════════════════════════════════════════════════════")
+
+	if filter.DateRange != nil {
+		fmt.Printf("  Date Range: %s to %s\n", filter.DateRange.From.Format("2006-01-02"), filter.DateRange.To.Format("2006-01-02"))
+	} else {
+		fmt.Println("  Date Range: All Time")
+	}
+	fmt.Println("───────────────────────────────────────────────────────────────────────────────────────────────────────────────")
+	fmt.Println()
+
+	if len(teams) == 0 {
+		fmt.Println("  No data found.")
+		fmt.Println()
 		return
 	}
 
-	fmt.Println("Technician Efficiency (Ranked by Avg Hours - Lower is Better)")
-	fmt.Println("════════════════════════════════════════════════════════════════════════════════")
-	fmt.Printf("%-25s  %8s  %12s  %12s  %14s\n",
-		"Technician", "Jobs", "Total Hours", "Avg Hrs/Job", "Avg Est/Job")
-	fmt.Println("────────────────────────────────────────────────────────────────────────────────")
+	for _, team := range teams {
+		fmt.Printf("  ▶ %s (Team)\n", team.BusinessUnit)
+		fmt.Println()
 
-	for i, r := range results {
-		name := r.Name
-		if len(name) > 25 {
-			name = name[:22] + "..."
+		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+
+		// Team aggregate row
+		fmt.Fprintln(w, "    \tJobs\tCallback %\tConversion %\tAvg Ticket\tAvg Hours\tTechs\t")
+		fmt.Fprintln(w, "    \t────\t──────────\t────────────\t──────────\t─────────\t─────\t")
+		fmt.Fprintf(w, "    TEAM TOTAL\t%d\t%.1f%%\t%.1f%%\t$%.0f\t%.1f\t%d\t\n",
+			team.Aggregated.TotalJobsCompleted,
+			team.Aggregated.CallbackRate,
+			team.Aggregated.ConversionRate,
+			team.Aggregated.AvgTicket,
+			team.Aggregated.AvgTimeOnJob,
+			len(team.Technicians),
+		)
+
+		w.Flush()
+
+		if showTechs && len(team.Technicians) > 0 {
+			fmt.Println()
+			fmt.Println("    Individual Technicians:")
+
+			w2 := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+			fmt.Fprintln(w2, "      Name\tJobs\tCallback %\tConversion %\tAvg Ticket\tAvg Hours\t")
+			fmt.Fprintln(w2, "      ────\t────\t──────────\t────────────\t──────────\t─────────\t")
+
+			for _, tech := range team.Technicians {
+				fmt.Fprintf(w2, "      %s\t%d\t%.1f%%\t%.1f%%\t$%.0f\t%.1f\t\n",
+					truncateName(tech.TechnicianName, 20),
+					tech.TotalJobsCompleted,
+					tech.CallbackRate,
+					tech.ConversionRate,
+					tech.AvgTicket,
+					tech.AvgTimeOnJob,
+				)
+			}
+
+			w2.Flush()
 		}
 
-		totalHrs := "N/A"
-		if r.TotalHoursWorked.Valid {
-			totalHrs = fmt.Sprintf("%10.1f", r.TotalHoursWorked.Float64)
-		}
+		fmt.Println()
+	}
+}
 
-		avgHrs := "N/A"
-		if r.AvgHoursPerJob.Valid {
-			avgHrs = fmt.Sprintf("%10.1f", r.AvgHoursPerJob.Float64)
-		}
+// -----------------------------------------------------------------
+// Subcommand: list
+// -----------------------------------------------------------------
 
-		avgEst := "N/A"
-		if r.AvgEstimatesPerJob.Valid {
-			avgEst = fmt.Sprintf("%12.1f", r.AvgEstimatesPerJob.Float64)
-		}
+func (tc *TechnicianCommand) runList(ctx context.Context, args []string) error {
+	// Get all technician KPIs (just to get the list with business units)
+	kpis, err := tc.svc.GetTechnicianKPIs(ctx, analytics.TechnicianFilter{})
+	if err != nil {
+		return fmt.Errorf("failed to get technicians: %w", err)
+	}
 
-		rank := "   "
-		if i < 3 {
-			medals := []string{"🥇 ", "🥈 ", "🥉 "}
-			rank = medals[i]
-		}
+	fmt.Println()
+	fmt.Println("═══════════════════════════════════════════════════════════════════════════════════════════════════════════════")
+	fmt.Println("                                    TECHNICIANS")
+	fmt.Println("═══════════════════════════════════════════════════════════════════════════════════════════════════════════════")
+	fmt.Println()
 
-		fmt.Printf("%s%-22s  %8d  %12s  %12s  %14s\n",
-			rank,
-			name,
-			r.JobsServiced,
-			totalHrs,
-			avgHrs,
-			avgEst,
+	if len(kpis) == 0 {
+		fmt.Println("  No technicians found.")
+		fmt.Println()
+		return nil
+	}
+
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+
+	fmt.Fprintln(w, "  ID\tName\tBusiness Unit\tTotal Jobs\t")
+	fmt.Fprintln(w, "  ──\t────\t─────────────\t──────────\t")
+
+	for _, kpi := range kpis {
+		fmt.Fprintf(w, "  %d\t%s\t%s\t%d\t\n",
+			kpi.TechnicianID,
+			kpi.TechnicianName,
+			kpi.BusinessUnit,
+			kpi.TotalJobsCompleted,
 		)
 	}
-	fmt.Println("════════════════════════════════════════════════════════════════════════════════")
+
+	w.Flush()
+	fmt.Println()
+	fmt.Printf("  Total: %d technicians\n", len(kpis))
+	fmt.Println()
+
+	return nil
+}
+
+// -----------------------------------------------------------------
+// Helper functions
+// -----------------------------------------------------------------
+
+func parseSortField(s string) analytics.SortField {
+	switch strings.ToLower(s) {
+	case "callback_rate", "callback":
+		return analytics.SortByCallbackRate
+	case "time_on_job", "time", "hours":
+		return analytics.SortByTimeOnJob
+	case "conversion_rate", "conversion":
+		return analytics.SortByConversionRate
+	case "avg_ticket", "ticket", "revenue":
+		return analytics.SortByAvgTicket
+	case "estimates_per_job", "estimates":
+		return analytics.SortByEstimatesPerJob
+	case "total_jobs", "jobs":
+		return analytics.SortByTotalJobs
+	default:
+		return analytics.SortByTotalJobs
+	}
+}
+
+func parsePeriodType(s string) analytics.PeriodType {
+	switch strings.ToLower(s) {
+	case "weekly", "week", "w":
+		return analytics.PeriodWeekly
+	case "monthly", "month", "m":
+		return analytics.PeriodMonthly
+	case "quarterly", "quarter", "q":
+		return analytics.PeriodQuarterly
+	case "yearly", "year", "y":
+		return analytics.PeriodYearly
+	default:
+		return analytics.PeriodMonthly
+	}
+}
+
+func truncateName(name string, maxLen int) string {
+	if len(name) <= maxLen {
+		return name
+	}
+	return name[:maxLen-3] + "..."
+}
+
+func metricLabel(metric string) string {
+	switch metric {
+	case "callback_rate":
+		return "Callback %"
+	case "conversion_rate":
+		return "Conversion %"
+	case "avg_ticket":
+		return "Avg Ticket"
+	case "time_on_job":
+		return "Avg Hours"
+	default:
+		return "Value"
+	}
+}
+
+func formatMetricValue(kpi analytics.TechnicianKPIs, metric string) string {
+	switch metric {
+	case "callback_rate":
+		return fmt.Sprintf("%.1f%%", kpi.CallbackRate)
+	case "conversion_rate":
+		return fmt.Sprintf("%.1f%%", kpi.ConversionRate)
+	case "avg_ticket":
+		return fmt.Sprintf("$%.0f", kpi.AvgTicket)
+	case "time_on_job":
+		return fmt.Sprintf("%.1f hrs", kpi.AvgTimeOnJob)
+	default:
+		return ""
+	}
+}
+
+func formatIntChange(change int) string {
+	if change > 0 {
+		return fmt.Sprintf("↑ +%d", change)
+	} else if change < 0 {
+		return fmt.Sprintf("↓ %d", change)
+	}
+	return "→ 0"
+}
+
+func formatFloatChange(change float64) string {
+	if change > 0.05 {
+		return fmt.Sprintf("↑ +%.1f", change)
+	} else if change < -0.05 {
+		return fmt.Sprintf("↓ %.1f", change)
+	}
+	return "→ 0"
+}
+
+func formatPercentChange(change float64) string {
+	if change > 0.05 {
+		return fmt.Sprintf("↑ +%.1f%%", change)
+	} else if change < -0.05 {
+		return fmt.Sprintf("↓ %.1f%%", change)
+	}
+	return "→ 0%"
+}
+
+func formatPercentChangeInverse(change float64) string {
+	// For metrics where lower is better (callback rate)
+	if change > 0.05 {
+		return fmt.Sprintf("↓ +%.1f%%", change) // worse
+	} else if change < -0.05 {
+		return fmt.Sprintf("↑ %.1f%%", change) // better
+	}
+	return "→ 0%"
+}
+
+func formatDollarChange(change float64) string {
+	if change > 1 {
+		return fmt.Sprintf("↑ +$%.0f", change)
+	} else if change < -1 {
+		return fmt.Sprintf("↓ $%.0f", change)
+	}
+	return "→ $0"
+}
+
+func formatHoursChangeInverse(change float64) string {
+	// For metrics where lower is better (time on job)
+	if change > 0.05 {
+		return fmt.Sprintf("↓ +%.1f hrs", change) // worse
+	} else if change < -0.05 {
+		return fmt.Sprintf("↑ %.1f hrs", change) // better
+	}
+	return "→ 0 hrs"
+}
+
+// reportTechnicians is called from handleReport for backward compatibility
+// with "sta report technicians" command. It delegates to the TechnicianCommand.
+func reportTechnicians(ctx context.Context, db *sql.DB, args []string) {
+	cmd := NewTechnicianCommand(db)
+	if err := cmd.Run(ctx, args); err != nil {
+		fmt.Printf("Error: %v\n", err)
+	}
 }

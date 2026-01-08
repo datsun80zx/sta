@@ -11,7 +11,7 @@
 const BASE_URL = '/api';
 
 // Toggle this to switch between mock and real API
-const USE_MOCK_DATA = true;
+const USE_MOCK_DATA = false;
 
 // Import mock functions for development
 import { mockGetBusinessUnits, mockGetBusinessUnit, mockGetTechnician } from './mock-data.js';
